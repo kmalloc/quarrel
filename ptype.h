@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 #include <cstdint>
+#include <functional>
 
 namespace quarrel {
 
@@ -26,38 +27,36 @@ namespace quarrel {
 
     constexpr int MAX_ACCEPTOR_NUM = 32;
 
-    struct ProposalValue {
-        std::string value_;
-        uintptr_t value_opaque_; // opaque data for value used by upper application
-    };
-
     struct Proposal {
+
         uint64_t pid_; // proposal id
-        ProposalValue value_;
+        uint64_t term_; // logical time
 
         uint64_t plid_; // plog id
         uint64_t pentry_; // plog entry
 
-        int proposer_;
-    };
+        uint64_t value_opaque_; // opaque data for value used by upper application
 
-    struct PaxosMsg {
+        uint16_t proposer_;
+        uint32_t value_size_;
+        uint8_t data_[0];
+    } __attribute__((packed, aligned(1)));
+
+    struct PaxosMsgHeader {
         uint32_t magic_;
         uint32_t size_;
         uint32_t type_;
         uint32_t sender_;
-        char data_[0];
-    };
+        uint32_t version_;
+    } __attribute__((packed, aligned(1)));
 
     struct PaxosStateMachine {
         uint32_t state_;
         uint64_t prepare_id_;
         uint64_t accepted_id_;
 
-        Proposal proposal_;
-
-        ProposalValue value_from_peer_; // value from peer
         uint32_t accepted_id_from_peer_;
+        std::unique_ptr<Proposal> proposal_;
 
         uint32_t num_promise_; // number of acceptor who sent promise
         uint32_t num_accepted_; // number of acceptor who accepted.
