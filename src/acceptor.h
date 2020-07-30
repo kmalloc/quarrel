@@ -5,6 +5,7 @@
 #include "queue.h"
 #include "entry.h"
 
+#include <thread>
 #include <functional>
 
 namespace quarrel {
@@ -22,6 +23,7 @@ namespace quarrel {
 
             int Accept(const Proposal& proposal);
             int Prepare(const Proposal& proposal);
+            int HandleMsg(std::unique_ptr<PaxosMsg> msg);
 
         private:
             uint64_t term_;
@@ -29,6 +31,7 @@ namespace quarrel {
             uint64_t local_chosen_entry_;
             uint64_t global_chosen_entry_;
 
+            std::thread thread_;
             PaxosStateMachine state_;
             LockFreeQueue<std::unique_ptr<PaxosMsg>> msg_;
     };
