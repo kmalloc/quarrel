@@ -6,7 +6,9 @@
 #include <vector>
 #include <unordered_map>
 
+#include "conn.h"
 #include "ptype.h"
+#include "entry.h"
 #include "proposer.h"
 #include "acceptor.h"
 #include "config.h"
@@ -16,10 +18,15 @@ namespace quarrel {
     class Paxos {
         public:
             // config_file: json config file path
-            explicit Paxos(const std::string& config_file);
+             Paxos(const std::string& config_file);
+
             ~Paxos();
 
-            int StartWorker();
+            int Start();
+            int Stop();
+
+            void SetConnMng(std::unique_ptr<ConnMng> mng);
+            void SetEntryMng(std::unique_ptr<EntryMng> mng);
 
             // submit local chosen-proposal to db
             int SubmitPendingProposal();
@@ -28,18 +35,16 @@ namespace quarrel {
             // empty value indicates a read probe, testing whether local is up to date.
             int Propose(uint64_t opaque, std::string value);
 
-            virtual int GetMaxCommitedId() = 0;
-            virtual int OnSubmit(const Proposal& p) = 0;
-            virtual int SavePlog(const Proposal& p) = 0;
-            virtual int LoadPlog(int pentry, Proposal& p) = 0;
-
         private:
             Paxos(const Paxos&) = delete;
             Paxos& operator=(const Paxos&) = delete;
 
             IdGen idgen_;
             Proposer proposer_;
-            Acceptor acceptor_;
+            std::vector<Acceptor> acceptor_;
+
+            std::unique_ptr<ConnMng> conn_mng_;
+            std::unique_ptr<EntryMng> entry_mng_;
     };
 
 }

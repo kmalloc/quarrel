@@ -3,12 +3,15 @@
 
 #include "ptype.h"
 #include "idgen.hpp"
+#include "acceptor.h"
+
+#include <vector>
 
 namespace quarrel {
 
 class Proposer {
     public:
-        int Propose(const Proposal& p);
+        int Propose(const Proposal& p, std::vector<Acceptor>& acceptor);
 
     private:
         int Accept(const Proposal& p);

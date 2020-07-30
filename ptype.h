@@ -8,7 +8,7 @@
 
 namespace quarrel {
 
-    enum {
+    enum PaxosState {
         kPaxosState_INIT = 0,
         kPaxosState_PREPARE = 1,
         kPaxosState_PROMISE = 2,
