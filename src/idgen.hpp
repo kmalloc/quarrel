@@ -3,6 +3,8 @@
 
 #include "ptype.h"
 
+#include <atomic>
+
 namespace quarrel {
     class IdGen {
         public:
@@ -11,11 +13,12 @@ namespace quarrel {
 
             void SetID(uint64_t val) { id_ = val; }
             void SetStep(uint64_t step) { step_ = step; }
-            uint64_t GetNextId() { id_ += step_; return id_; }
+            uint64_t GetStep() const { return step_; }
+            uint64_t GetAndInc() { id_ += step_; return id_; }
 
         private:
-            uint64_t id_;
             uint64_t step_;
+            std::atomic<uint64_t> id_;
     };
 }
 
