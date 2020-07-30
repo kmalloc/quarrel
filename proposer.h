@@ -1,9 +1,9 @@
 #ifndef __QUARREL_PROPOSER_H_
 #define __QUARREL_PROPOSER_H_
 
+#include "conn.h"
 #include "ptype.h"
 #include "idgen.hpp"
-#include "acceptor.h"
 
 #include <vector>
 
@@ -11,7 +11,7 @@ namespace quarrel {
 
 class Proposer {
     public:
-        int Propose(const Proposal& p, std::vector<Acceptor>& acceptor);
+        int Propose(const Proposal& p);
 
     private:
         int Accept(const Proposal& p);
@@ -19,6 +19,7 @@ class Proposer {
 
     private:
         IdGen* idgen_;
+        ConnMng* conn_mng_;
 };
 
 }

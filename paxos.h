@@ -40,8 +40,8 @@ namespace quarrel {
             Paxos& operator=(const Paxos&) = delete;
 
             IdGen idgen_;
+            Acceptor acceptor_;
             Proposer proposer_;
-            std::vector<Acceptor> acceptor_;
 
             std::unique_ptr<ConnMng> conn_mng_;
             std::unique_ptr<EntryMng> entry_mng_;

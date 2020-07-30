@@ -41,12 +41,14 @@ namespace quarrel {
         uint8_t data_[0];
     } __attribute__((packed, aligned(1)));
 
-    struct PaxosMsgHeader {
+    struct PaxosMsg {
         uint32_t magic_;
         uint32_t size_;
         uint32_t type_;
         uint32_t sender_;
         uint32_t version_;
+        uint64_t reqid_; // rpc id
+        uint8_t  data_[0];
     } __attribute__((packed, aligned(1)));
 
     struct PaxosStateMachine {

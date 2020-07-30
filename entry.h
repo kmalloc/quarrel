@@ -7,6 +7,7 @@ namespace quarrel {
     class EntryMng {
         public:
             virtual int GetMaxCommitedId() = 0;
+            virtual int Checkpoint(uint64_t term) = 0;
             virtual int OnChosen(const Proposal& p) = 0;
             virtual int SavePlog(const Proposal& p) = 0;
             virtual int LoadPlog(int pentry, Proposal& p) = 0;
