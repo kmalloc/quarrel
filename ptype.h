@@ -28,7 +28,6 @@ namespace quarrel {
     constexpr int MAX_ACCEPTOR_NUM = 32;
 
     struct Proposal {
-
         uint64_t pid_; // proposal id
         uint64_t term_; // logical time
 
