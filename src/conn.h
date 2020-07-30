@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include "lrumap.hpp"
+
 #include "ptype.h"
 
 namespace quarrel {
@@ -13,8 +15,9 @@ namespace quarrel {
 
     struct ReqData {
         int size_;
-        void* data_;
+        uint32_t expire_ms;
         ResponseCallback cb_;
+        std::unique_ptr<uint8_t> data_;
     };
 
     class Conn {
@@ -26,7 +29,7 @@ namespace quarrel {
             virtual int DoRequest(ReqData req) = 0;
             virtual int DoResponse(std::unique_ptr<PaxosMsg> rsp) = 0;
 
-            virtual int HandleRequest(std::unique_ptr<PaxosMsg> req);
+            virtual int HandleRecv(std::unique_ptr<PaxosMsg> req);
 
         private:
             Conn(const Conn&) = delete;
@@ -43,6 +46,8 @@ namespace quarrel {
     };
 
     class RemoteConn: public Conn {
+        private:
+            lru_map<uint64_t, ReqData> req_;
     };
 
     using ConnCreator = std::unique_ptr<Conn>(std::string, int);
