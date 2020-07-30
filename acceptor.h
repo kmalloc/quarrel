@@ -13,12 +13,15 @@ namespace quarrel {
             explicit Acceptor(int id);
             ~Acceptor();
 
-            int Prepare(const Proposal& proposal);
-            int Accept(const Proposal& proposal);
+            int StartWorker();
+            int AddMsg(std::unique_ptr<PaxosMsg> msg);
 
         private:
             Acceptor(const Acceptor&) = delete;
             Acceptor& operator=(const Acceptor&) = delete;
+
+            int Accept(const Proposal& proposal);
+            int Prepare(const Proposal& proposal);
 
         private:
             uint64_t term_;
@@ -27,6 +30,7 @@ namespace quarrel {
             uint64_t global_chosen_entry_;
 
             PaxosStateMachine state_;
+            LockFreeQueue<std::unique_ptr<PaxosMsg>> msg_;
     };
 };
 

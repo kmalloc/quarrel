@@ -8,8 +8,8 @@
 
 namespace quarrel {
 
-    using RequestCallback = int(void*, int);
     using ResponseCallback = int(void*, int);
+    using RequestHandler = int (void*, int, ResponseCallback cb);
 
     struct ReqData {
         int size_;
@@ -24,6 +24,7 @@ namespace quarrel {
             int GetFd() const { return fd_; }
 
             virtual int DoRequest(ReqData req) = 0;
+            virtual int DoResponse(std::unique_ptr<PaxosMsg> rsp) = 0;
 
             virtual int HandleRequest(std::unique_ptr<PaxosMsg> req);
 
@@ -35,7 +36,7 @@ namespace quarrel {
             int fd_;
             int port_;
             std::string addr_;
-            RequestCallback onReq_;
+            RequestHandler onReq_;
     };
 
     class LocalConn : public Conn {
