@@ -2,6 +2,7 @@
 #define __QUARREL_CONN_H_
 
 #include <string>
+#include <vector>
 
 #include "ptype.h"
 
@@ -53,6 +54,8 @@ namespace quarrel {
         private:
             ConnMng(const ConnMng&) = delete;
             ConnMng& operator=(const ConnMng&) = delete;
+
+            std::vector<std::unique_ptr<Conn>> conn_;
     };
 }
 
