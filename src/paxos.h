@@ -7,8 +7,8 @@
 #include <unordered_map>
 
 #include "conn.h"
+#include "plog.h"
 #include "ptype.h"
-#include "entry.h"
 #include "proposer.h"
 #include "acceptor.h"
 #include "config.h"

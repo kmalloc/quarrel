@@ -3,7 +3,7 @@
 
 #include "ptype.h"
 #include "queue.h"
-#include "entry.h"
+#include "plog.h"
 
 #include <thread>
 #include <functional>
@@ -26,11 +26,8 @@ namespace quarrel {
             int HandleMsg(std::unique_ptr<PaxosMsg> msg);
 
         private:
-            // logical time
-            uint64_t term_;
-
-            uint64_t local_chosen_entry_;
-            uint64_t global_chosen_entry_;
+            PlogMng pmn_;
+            uint64_t term_; // logical time
 
             std::thread thread_;
             PaxosStateMachine state_;

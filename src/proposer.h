@@ -12,7 +12,7 @@ namespace quarrel {
 class Proposer {
     public:
         // propose a value asychonously
-        int Propose(const Proposal& p);
+        int Propose(uint64_t opaque, const std::string& val);
 
     private:
         int Accept(const Proposal& p);
