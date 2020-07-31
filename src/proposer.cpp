@@ -32,7 +32,7 @@ namespace quarrel {
         }
 
         if (ret) {
-            LOG_ERR << "propose failed, pinst:" << pinst << ", entry:" << entry << ", opaque:" << opaque;
+            LOG_ERR << "do prepare failed, pinst:" << pinst << ", entry:" << entry << ", opaque:" << opaque;
             return ret;
         }
 
