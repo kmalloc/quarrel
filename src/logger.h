@@ -2,6 +2,7 @@
 #define __QUARREL_LOGGING_H_
 
 #include <sstream>
+#include <functional>
 #include <string.h>
 
 namespace quarrel {
@@ -56,8 +57,8 @@ class Logger {
   static LogLevel logLevel();
   static void setLogLevel(LogLevel level);
 
-  typedef void (*FlushFunc)();
-  typedef void (*OutputFunc)(const char* msg, int len);
+  using FlushFunc = std::function<void()>;
+  using OutputFunc = std::function<void(const char*, int)>;
 
   static void setFlush(FlushFunc);
   static void setOutput(OutputFunc);
@@ -65,7 +66,7 @@ class Logger {
  private:
   class Impl {
    public:
-    typedef Logger::LogLevel LogLevel;
+    using LogLevel = Logger::LogLevel;
     Impl(LogLevel level, int old_errno, const SourceFile& file, int line);
     void formatTime();
     void finish();
