@@ -32,6 +32,8 @@ TEST(lrumap, testapi) {
     ASSERT_TRUE(m.exists(5));
     ASSERT_FALSE(m.exists(2));
 
+    ASSERT_EQ(3, m.size());
+
     m.get(3);
     m.put(6, 400);
     ASSERT_TRUE(m.exists(6));

@@ -3,12 +3,23 @@
 
 #include "plog.h"
 #include "ptype.h"
+#include "idgen.hpp"
 
 #include <vector>
 
 namespace quarrel {
+    class Entry {
+        public:
+
+        private:
+            IdGen ig_;
+            PaxosStateMachine state_;
+    };
+
     class EntryMng {
         public:
+            virtual ~EntryMng();
+
             virtual int GetMaxCommitedId(uint64_t plid) = 0;
             virtual int Checkpoint(uint64_t plid, uint64_t term) = 0;
             virtual int OnChosen(const Proposal& p) = 0;

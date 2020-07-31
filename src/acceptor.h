@@ -4,14 +4,15 @@
 #include "ptype.h"
 #include "queue.h"
 #include "plog.h"
+#include "config.h"
 
 #include <thread>
-#include <functional>
+#include <memory>
 
 namespace quarrel {
     class Acceptor {
         public:
-            explicit Acceptor(int id);
+            explicit Acceptor(std::shared_ptr<Configure> config);
             ~Acceptor();
 
             int StartWorker();
@@ -28,11 +29,12 @@ namespace quarrel {
         private:
             PlogMng pmn_;
             uint64_t term_; // logical time
+            std::shared_ptr<Configure> config_;
 
             std::thread thread_;
             PaxosStateMachine state_;
             LockFreeQueue<std::unique_ptr<PaxosMsg>> msg_;
     };
-};
+}
 
 #endif

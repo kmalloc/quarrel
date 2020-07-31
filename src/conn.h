@@ -3,10 +3,11 @@
 
 #include <string>
 #include <vector>
-
-#include "lrumap.hpp"
+#include <memory>
 
 #include "ptype.h"
+#include "config.h"
+#include "lrumap.hpp"
 
 namespace quarrel {
 
@@ -22,7 +23,8 @@ namespace quarrel {
 
     class Conn {
         public:
-            Conn(std::string addr, int port);
+            Conn(AddrInfo& addr);
+            virtual ~Conn();
 
             int GetFd() const { return fd_; }
 
@@ -37,8 +39,7 @@ namespace quarrel {
 
         protected:
             int fd_;
-            int port_;
-            std::string addr_;
+            AddrInfo addr_;
             RequestHandler onReq_;
     };
 
@@ -54,8 +55,11 @@ namespace quarrel {
 
     class ConnMng {
         public:
+            explicit ConnMng(std::shared_ptr<Configure> config);
+
             // poll conn & recv.
             int StartWorker();
+            int StopWorker();
 
         private:
             ConnMng(const ConnMng&) = delete;

@@ -2,8 +2,8 @@
 #define __QUARREL_PAXOS_H_
 
 #include <string>
-#include <thread>
 #include <vector>
+#include <memory>
 #include <unordered_map>
 
 #include "conn.h"
@@ -17,8 +17,7 @@ namespace quarrel {
 
     class Paxos {
         public:
-            // config_file: json config file path
-             Paxos(const std::string& config_file);
+            explicit Paxos(std::unique_ptr<Configure> config);
 
             ~Paxos();
 
@@ -33,16 +32,20 @@ namespace quarrel {
 
             // try to propose a new value.
             // empty value indicates a read probe, testing whether local is up to date.
-            int Propose(uint64_t opaque, const std::string& value);
+            // paxos_inst: the paxos instance to use, default to 0
+            int Propose(uint64_t opaque, const std::string& value, uint64_t paxos_inst = 0);
 
         private:
             Paxos(const Paxos&) = delete;
             Paxos& operator=(const Paxos&) = delete;
 
+            // these most basic info should come first.
+            std::shared_ptr<Configure> config_;
+            ConnMng conn_mng_;
+
+            // those use basic info comes after.
             Acceptor acceptor_;
             Proposer proposer_;
-
-            std::unique_ptr<ConnMng> conn_mng_;
     };
 
 }
