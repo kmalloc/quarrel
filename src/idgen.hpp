@@ -9,12 +9,13 @@ namespace quarrel {
     class IdGen {
         public:
             IdGen(uint64_t start, uint64_t step):
-                id_(start), step_(step) {}
+                step_(step), id_(start) {}
 
-            void SetID(uint64_t val) { id_ = val; }
             void SetStep(uint64_t step) { step_ = step; }
             uint64_t GetStep() const { return step_; }
-            uint64_t GetAndInc() { id_ += step_; return id_; }
+            uint64_t GetAndInc() { uint64_t v = id_; id_ += step_; return v; }
+
+            uint64_t SetGreatThan(int v) { id_ += (v - id_ + step_ - 1)/step_ * step_;  return id_; }
 
         private:
             uint64_t step_;
