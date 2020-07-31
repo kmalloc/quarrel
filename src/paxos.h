@@ -24,9 +24,6 @@ namespace quarrel {
             int Start();
             int Stop();
 
-            void SetConnMng(std::unique_ptr<ConnMng> mng);
-            void SetEntryMng(std::unique_ptr<EntryMng> mng);
-
             // submit local chosen-proposal to db
             int SubmitPendingProposal();
 
@@ -38,6 +35,8 @@ namespace quarrel {
         private:
             Paxos(const Paxos&) = delete;
             Paxos& operator=(const Paxos&) = delete;
+
+            bool started_{false};
 
             // these most basic info should come first.
             std::shared_ptr<Configure> config_;

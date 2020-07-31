@@ -16,6 +16,7 @@ namespace quarrel {
             ~Acceptor();
 
             int StartWorker();
+            int StopWorker();
             int AddMsg(std::unique_ptr<PaxosMsg> msg);
 
         private:
