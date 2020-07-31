@@ -37,4 +37,11 @@ TEST(lrumap, testapi) {
     ASSERT_TRUE(m.exists(6));
     ASSERT_TRUE(m.exists(3));
     ASSERT_FALSE(m.exists(4));
+
+    ASSERT_TRUE(m.del(3));
+    ASSERT_FALSE(m.del(3));
+    ASSERT_FALSE(m.exists(3));
+    ASSERT_THROW(m.get(3), std::range_error);
+
+    ASSERT_EQ(2, m.size());
 }
