@@ -1,0 +1,4 @@
+build
+**/*.o
+libqr.a
+quarreltest

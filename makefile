@@ -26,8 +26,8 @@ qr: $(OBJ)
 
 test: $(OBJ) $(TESTOBJ)
 	mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -o qt $^ -lpthread -lgtest -lgtest_main
-	./qt
+	$(CXX) $(CXXFLAGS) -o quarreltest $^ -lpthread -lgtest -lgtest_main
+	./quarreltest
 
 # Include all .d files
 -include $(DEP)
