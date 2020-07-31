@@ -1,6 +1,7 @@
 #ifndef __QUARREL_PAXOS_H_
 #define __QUARREL_PAXOS_H_
 
+#include <future>
 #include <string>
 #include <vector>
 #include <memory>
@@ -31,6 +32,7 @@ namespace quarrel {
             // empty value indicates a read probe, testing whether local is up to date.
             // paxos_inst: the paxos instance to use, default to 0
             int Propose(uint64_t opaque, const std::string& value, uint64_t paxos_inst = 0);
+            std::future<int> ProposeAsync(uint64_t opaque, const std::string& value, uint64_t paxos_inst = 0);
 
         private:
             Paxos(const Paxos&) = delete;
