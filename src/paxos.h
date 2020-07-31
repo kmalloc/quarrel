@@ -44,7 +44,6 @@ namespace quarrel {
             Proposer proposer_;
 
             std::unique_ptr<ConnMng> conn_mng_;
-            std::unique_ptr<EntryMng> entry_mng_;
     };
 
 }

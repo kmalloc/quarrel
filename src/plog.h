@@ -4,6 +4,8 @@
 #include "plog.h"
 #include "ptype.h"
 
+#include <vector>
+
 namespace quarrel {
     class EntryMng {
         public:
@@ -12,14 +14,17 @@ namespace quarrel {
             virtual int OnChosen(const Proposal& p) = 0;
             virtual int SavePlog(const Proposal& p) = 0;
             virtual int LoadPlog(uint64_t plid, int entry, Proposal& p) = 0;
+
+        private:
+            uint64_t local_chosen_entry_;
+            uint64_t global_chosen_entry_;
     };
 
     class PlogMng {
         public:
 
         private:
-            uint64_t local_chosen_entry_;
-            uint64_t global_chosen_entry_;
+            std::vector<EntryMng> entries_;
     };
 }
 
