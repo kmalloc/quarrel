@@ -88,6 +88,6 @@ inline Logger::LogLevel Logger::logLevel() { return g_logLevel; }
 
 #define LOG_WARN Logger(__FILE__, __LINE__, Logger::WARN).stream()
 #define LOG_INFO Logger(__FILE__, __LINE__, Logger::INFO).stream()
-#define LOG_ERROR Logger(__FILE__, __LINE__, Logger::ERROR).stream()
+#define LOG_ERR Logger(__FILE__, __LINE__, Logger::ERROR).stream()
 
 #endif

@@ -3,6 +3,7 @@
 
 #include "plog.h"
 #include "ptype.h"
+#include "config.h"
 #include "idgen.hpp"
 
 #include <vector>
@@ -36,6 +37,7 @@ namespace quarrel {
 
     class PlogMng {
         public:
+            PlogMng(std::shared_ptr<Configure> config);
 
         private:
             EntryMngCreator creator_;

@@ -40,7 +40,8 @@ namespace quarrel {
 
             // these most basic info should come first.
             std::shared_ptr<Configure> config_;
-            ConnMng conn_mng_;
+            std::shared_ptr<ConnMng> conn_mng_;
+            std::shared_ptr<PlogMng> plog_mng_;
 
             // those use basic info comes after.
             Acceptor acceptor_;

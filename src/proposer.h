@@ -2,6 +2,7 @@
 #define __QUARREL_PROPOSER_H_
 
 #include "conn.h"
+#include "plog.h"
 #include "config.h"
 #include "ptype.h"
 #include "idgen.hpp"
@@ -14,15 +15,22 @@ namespace quarrel {
 class Proposer {
     public:
         explicit Proposer(std::shared_ptr<Configure> config);
+        ~Proposer() {}
+
+        void SetPlogMng(std::shared_ptr<PlogMng> mng) { pmn_ = std::move(mng); }
+        void SetConnMng(std::shared_ptr<ConnMng> mng) { conn_ = std::move(mng); }
 
         // propose a value asychonously
-        int Propose(ConnMng& conn, uint64_t opaque, const std::string& val, uint64_t paxos_inst = 0);
+        int Propose(uint64_t opaque, const std::string& val, uint64_t paxos_inst = 0);
 
     private:
-        int Accept(ConnMng& conn, const Proposal& p);
-        int Prepare(ConnMng& conn, const Proposal& p);
+        int doAccept(PaxosMsgPtr& p);
+        int doPrepare(PaxosMsgPtr& p);
+        bool calSkipPrepare(uint64_t pinst, uint64_t entry);
 
     private:
+        std::shared_ptr<PlogMng> pmn_;
+        std::shared_ptr<ConnMng> conn_;
         std::shared_ptr<Configure> config_;
 };
 

@@ -28,8 +28,8 @@ namespace quarrel {
             int HandleMsg(std::unique_ptr<PaxosMsg> msg);
 
         private:
-            PlogMng pmn_;
             uint64_t term_; // logical time
+            std::shared_ptr<PlogMng> pmn_;
             std::shared_ptr<Configure> config_;
 
             std::thread thread_;
