@@ -65,7 +65,8 @@ namespace quarrel {
             ConnMng(const ConnMng&) = delete;
             ConnMng& operator=(const ConnMng&) = delete;
 
-            std::vector<std::unique_ptr<Conn>> conn_;
+            std::unique_ptr<LocalConn> local_conn_;
+            std::vector<std::unique_ptr<Conn>> remote_conn_;
     };
 }
 

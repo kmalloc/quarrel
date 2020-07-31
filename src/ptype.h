@@ -29,7 +29,8 @@ namespace quarrel {
 
     enum PaxosErrCode {
         kPaxosErrCode_INVALID = 0,
-        kPaxosErrCode_OOM = 1,
+        kPaxosErrCode_OOM = 3001,
+        kPaxosErrCode_TIMEOUT= 3002,
     };
 
     constexpr int MAX_ACCEPTOR_NUM = 32;

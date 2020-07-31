@@ -1,5 +1,6 @@
 #include "proposer.h"
 #include "logger.h"
+#include "waitgroup.hpp"
 
 namespace quarrel {
 
@@ -36,6 +37,8 @@ namespace quarrel {
             return ret;
         }
 
+        pm->type_ = kPaxosMsgType_ACCEPT_REQ;
+
         return doAccept(pm);
     }
 
@@ -47,6 +50,15 @@ namespace quarrel {
     int Proposer::doPrepare(PaxosMsgPtr& p) {
         // send to local conn
         // then to remote
+
+        auto majority = config_->total_acceptor_/2 + 1;
+        auto cb = [](){};
+        // TODO
+
+        WaitGroup wg(majority, config_->timeout_);
+        if (!wg.Wait()) return kPaxosErrCode_TIMEOUT;
+
+        // TODO
 
         return 0;
     }

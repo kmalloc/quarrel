@@ -14,6 +14,7 @@ namespace quarrel {
     struct Configure {
         int timeout_;  // timeout for propose operation.
         int local_id_; // local paxos id
+        int total_acceptor_;
         int storage_type_; // storage type for plog
         int msg_version_; // msg version
         std::string local_storage_path_; // storage path
