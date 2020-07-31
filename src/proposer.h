@@ -26,7 +26,7 @@ class Proposer {
     private:
         int doAccept(PaxosMsgPtr& p);
         int doPrepare(PaxosMsgPtr& p);
-        bool calSkipPrepare(uint64_t pinst, uint64_t entry);
+        bool canSkipPrepare(uint64_t pinst, uint64_t entry);
 
     private:
         std::shared_ptr<PlogMng> pmn_;

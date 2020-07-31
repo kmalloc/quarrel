@@ -42,9 +42,9 @@ namespace quarrel {
         uint64_t pentry_; // plog entry
         uint16_t proposer_;
 
-        uint64_t value_opaque_; // opaque data for value used by upper application
+        uint32_t size_; // sizeof value
+        uint64_t opaque_; // opaque data for value used by upper application
 
-        uint32_t size_;
         uint8_t data_[1]; // google struct hack
     } __attribute__((packed, aligned(1)));
 

@@ -10,8 +10,10 @@ namespace quarrel {
 
         auto pp = reinterpret_cast<Proposal*>(rp->data_);
 
-        pp->size_ = value_size;
-        rp->size_ = ProposalHeaderSz + value_size;
+        pp->size_  = value_size;
+
+        rp->magic_ = 0xbadf00d;
+        rp->size_  = ProposalHeaderSz + value_size;
 
         PaxosMsgPtr p(rp);
         return p;

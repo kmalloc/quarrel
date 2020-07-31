@@ -10,8 +10,21 @@ namespace quarrel {
         auto pm = AllocProposalMsg(val.size());
         if (!pm) return kPaxosErrCode_OOM;
 
-        auto local_conn = conn_->GetLocalConn();
-        auto entry = pmn_->GetMaxCommitedEntry(pinst);
+        auto entry = pmn_->GetMaxCommittedEntry(pinst) + 1;
+        auto pid = pmn_->GenPrepareId(pinst, entry);
+
+        pm->from_ = config_->local_id_;
+        pm->version_ = config_->msg_version_;
+        pm->type_ = kPaxosMsgType_PREPARE_REQ;
+
+        auto pp = reinterpret_cast<Proposal*>(pm->data_);
+        //pp->term_ = xxxxx;
+        pp->pid_ = pid;
+        pp->plid_ = pinst;
+        pp->pentry_ = entry;
+        pp->opaque_ = opaque;
+        pp->proposer_ = config_->local_id_;
+        memcpy(pp->data_, val.data(), val.size());
 
         int ret = 0;
         if (!canSkipPrepare(pinst, entry)) {
@@ -26,7 +39,12 @@ namespace quarrel {
         return doAccept(pm);
     }
 
-    int Propose::doPrepare(PaxosMsgPtr& p) {
+    bool Proposer::canSkipPrepare(uint64_t pinst, uint64_t entry) {
+        // TODO
+        return false;
+    }
+
+    int Proposer::doPrepare(PaxosMsgPtr& p) {
         return 0;
     }
 }

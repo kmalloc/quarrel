@@ -39,6 +39,9 @@ namespace quarrel {
         public:
             PlogMng(std::shared_ptr<Configure> config);
 
+            uint64_t GetMaxCommittedEntry(uint64_t pinst);
+            uint64_t GenPrepareId(uint64_t pinst, uint64_t entry);
+
         private:
             EntryMngCreator creator_;
             std::vector<EntryMng> entries_;
