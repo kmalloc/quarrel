@@ -12,15 +12,14 @@ namespace quarrel {
 class Proposer {
     public:
         // propose a value asychonously
-        int Propose(uint64_t opaque, const std::string& val);
+        int Propose(ConnMng& conn, uint64_t opaque, const std::string& val);
 
     private:
-        int Accept(const Proposal& p);
-        int Prepare(const Proposal& p);
+        int Accept(ConnMng& conn, const Proposal& p);
+        int Prepare(ConnMng& conn, const Proposal& p);
 
     private:
-        IdGen* idgen_;
-        ConnMng* conn_mng_;
+        IdGen idgen_;
 };
 
 }

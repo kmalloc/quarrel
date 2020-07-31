@@ -39,7 +39,6 @@ namespace quarrel {
             Paxos(const Paxos&) = delete;
             Paxos& operator=(const Paxos&) = delete;
 
-            IdGen idgen_;
             Acceptor acceptor_;
             Proposer proposer_;
 
