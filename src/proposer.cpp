@@ -45,6 +45,16 @@ namespace quarrel {
     }
 
     int Proposer::doPrepare(PaxosMsgPtr& p) {
+        // send to local conn
+        // then to remote
+
+        return 0;
+    }
+
+    int Proposer::doAccept(PaxosMsgPtr& p) {
+        // send to local conn
+        // then to remote
+
         return 0;
     }
 }
