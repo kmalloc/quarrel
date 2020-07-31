@@ -7,7 +7,7 @@ INCLUDE := -I /usr/local/include/gtest/ -I./src
 
 # List of all .cpp source files.
 CPP = $(wildcard src/*.cpp) #$(wildcard src/*.hpp)
-TEST = $(wildcard test/*.cpp)
+TEST = $(wildcard test/*.cpp) src/logger.cpp
 
 # All .o files go to build dir.
 OBJ = $(CPP:%.cpp=$(BUILD_DIR)/%.o)
@@ -24,7 +24,7 @@ qr: $(OBJ)
 	mkdir -p $(@D)
 	ar -rcs ${quarrellib} $^
 
-test: $(OBJ) $(TESTOBJ)
+test: $(TESTOBJ)
 	mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -o quarreltest $^ -lpthread -lgtest -lgtest_main
 	./quarreltest

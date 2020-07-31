@@ -9,7 +9,7 @@ namespace quarrel {
 
 class WaitGroup {
  public:
-  WaitGroup(uint32_t count, uint32_t timeout_ms): curr_(0), count_(count), timeout_ms_(timeout_ms) {}
+  explicit WaitGroup(uint32_t count): curr_(0), count_(count) {}
 
   void Notify() {
     std::lock_guard<decltype(mutex_)> lock(mutex_);
@@ -19,11 +19,11 @@ class WaitGroup {
     }
   }
 
-  bool Wait() {
-    auto timeout = std::chrono::milliseconds(timeout_ms_);
+  bool Wait(uint32_t timeout_ms) {
+    auto timeout = std::chrono::milliseconds(timeout_ms);
     std::unique_lock<decltype(mutex_)> lock(mutex_);
 
-    while (true) { // Handle spurious wake-ups, timeout value should re-adjust
+    while (count_ > curr_) { // Handle spurious wake-ups, timeout value should re-adjust
       auto r = condition_.wait_for(lock, timeout);
       if (curr_ >= count_) break;
 

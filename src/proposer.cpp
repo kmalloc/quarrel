@@ -55,8 +55,8 @@ namespace quarrel {
         auto cb = [](){};
         // TODO
 
-        WaitGroup wg(majority, config_->timeout_);
-        if (!wg.Wait()) return kPaxosErrCode_TIMEOUT;
+        WaitGroup wg(majority);
+        if (!wg.Wait(config_->timeout_)) return kPaxosErrCode_TIMEOUT;
 
         // TODO
 
