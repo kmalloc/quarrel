@@ -33,7 +33,7 @@ namespace quarrel {
 
             // try to propose a new value.
             // empty value indicates a read probe, testing whether local is up to date.
-            int Propose(uint64_t opaque, std::string value);
+            int Propose(uint64_t opaque, const std::string& value);
 
         private:
             Paxos(const Paxos&) = delete;
