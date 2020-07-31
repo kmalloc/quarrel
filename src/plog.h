@@ -20,10 +20,14 @@ namespace quarrel {
             uint64_t global_chosen_entry_;
     };
 
+
+    using EntryMngCreator = std::unique_ptr<EntryMng>(int, const std::string&);
+
     class PlogMng {
         public:
 
         private:
+            EntryMngCreator creator_;
             std::vector<EntryMng> entries_;
     };
 }
