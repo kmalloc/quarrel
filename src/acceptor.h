@@ -26,6 +26,7 @@ namespace quarrel {
             int HandleMsg(std::unique_ptr<PaxosMsg> msg);
 
         private:
+            // logical time
             uint64_t term_;
 
             uint64_t local_chosen_entry_;

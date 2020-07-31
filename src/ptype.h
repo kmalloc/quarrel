@@ -63,7 +63,7 @@ namespace quarrel {
         uint32_t num_promise_; // number of acceptor who sent promise
         uint32_t num_accepted_; // number of acceptor who accepted.
         uint64_t acceptor_promised_[MAX_ACCEPTOR_NUM]; // acceptors who gave promise
-        uint64_t acceptor_accepted_[MAX_ACCEPTOR_NUM];
+        uint64_t acceptor_accepted_[MAX_ACCEPTOR_NUM]; // acceptors who accepted
     };
 }
 

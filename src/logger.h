@@ -6,6 +6,7 @@
 
 namespace quarrel {
 
+// FIXME
 class LogStream: public std::ostringstream {};
 
 class Logger {

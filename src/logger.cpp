@@ -41,6 +41,22 @@ class T {
   const unsigned len_;
 };
 
+template <int N>
+inline LogStream& operator<<(LogStream& s, const char (&arr)[N]) {
+    s.write(arr, N-1);
+    return s;
+}
+
+/*
+inline LogStream& operator<<(LogStream& s, const char* str) {
+    if (!str) return s;
+
+    auto sz = strlen(str);
+    s.write(str, sz);
+    return s;
+}
+*/
+
 inline LogStream& operator<<(LogStream& s, T v) {
   s.write(v.str_, v.len_);
   return s;
@@ -65,9 +81,9 @@ Logger::FlushFunc g_flush = defaultFlush;
 Logger::OutputFunc g_output = defaultOutput;
 
 Logger::Impl::Impl(LogLevel level, int savedErrno, const SourceFile& file, int line)
-  : stream_(),
+   :line_(line),
     level_(level),
-    line_(line),
+    stream_(),
     basename_(file) {
   formatTime();
   stream_ << T(LogLevelName[level], 6);

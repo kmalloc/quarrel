@@ -11,6 +11,7 @@ namespace quarrel {
 
 class Proposer {
     public:
+        // propose a value asychonously
         int Propose(const Proposal& p);
 
     private:
