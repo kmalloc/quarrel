@@ -21,7 +21,6 @@ public:
 		order_.emplace_front(key, std::move(value));
 		if (it != kv_.end()) {
 			order_.erase(it->second);
-			kv_.erase(it);
 		}
 		kv_[key] = order_.begin();
 
