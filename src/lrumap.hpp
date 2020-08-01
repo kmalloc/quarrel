@@ -16,7 +16,7 @@ public:
 
 	LruMap(size_t max_size) : _max_size(max_size) {}
 
-	void put(const key_t& key, value_t value) {
+	void Put(const key_t& key, value_t value) {
 		auto it = kv_.find(key);
 		order_.emplace_front(key, std::move(value));
 		if (it != kv_.end()) {
@@ -33,7 +33,7 @@ public:
 		}
 	}
 
-	const value_t& get(const key_t& key) {
+	const value_t& Get(const key_t& key) {
 		auto it = kv_.find(key);
 		if (it == kv_.end()) {
 			throw std::range_error("key not exists");
@@ -43,7 +43,7 @@ public:
 		}
 	}
 
-    bool del(const key_t& key) {
+    bool Del(const key_t& key) {
         auto it = kv_.find(key);
         if (it == kv_.end()) return false;
 
@@ -52,11 +52,11 @@ public:
         return true;
     }
 
-	bool exists(const key_t& key) const {
+	bool Exists(const key_t& key) const {
 		return kv_.find(key) != kv_.end();
 	}
 
-	size_t size() const {
+	size_t Size() const {
 		return kv_.size();
 	}
 
