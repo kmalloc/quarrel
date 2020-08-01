@@ -74,15 +74,10 @@ namespace quarrel {
         uint64_t acceptor_accepted_[MAX_ACCEPTOR_NUM]; // acceptors who accepted
     };
 
-    struct PaxosMsgDeleter {
-        void operator()(void* x) { free(x); }
-    };
-
-    using PaxosMsgPtr = std::unique_ptr<PaxosMsg, PaxosMsgDeleter>;
     constexpr auto PaxosMsgHeaderSz = offsetof(PaxosMsg, data_);
     constexpr auto ProposalHeaderSz = offsetof(Proposal, data_);
 
-    PaxosMsgPtr AllocProposalMsg(uint32_t value_size);
+    std::shared_ptr<PaxosMsg> AllocProposalMsg(uint32_t value_size);
 }
 
 #endif

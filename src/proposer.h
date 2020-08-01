@@ -20,12 +20,12 @@ class Proposer {
         void SetPlogMng(std::shared_ptr<PlogMng> mng) { pmn_ = std::move(mng); }
         void SetConnMng(std::shared_ptr<ConnMng> mng) { conn_ = std::move(mng); }
 
-        // propose a value asychonously
+        // propose a value
         int Propose(uint64_t opaque, const std::string& val, uint64_t paxos_inst = 0);
 
     private:
-        int doAccept(PaxosMsgPtr& p);
-        int doPrepare(PaxosMsgPtr& p);
+        int doAccept(std::shared_ptr<PaxosMsg>& p);
+        int doPrepare(std::shared_ptr<PaxosMsg>& p);
         bool canSkipPrepare(uint64_t pinst, uint64_t entry);
 
     private:

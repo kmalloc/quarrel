@@ -2,6 +2,8 @@
 #include "logger.h"
 #include "waitgroup.hpp"
 
+#include <atomic>
+
 namespace quarrel {
 
     Proposer::Proposer(std::shared_ptr<Configure> config)
@@ -47,23 +49,46 @@ namespace quarrel {
         return false;
     }
 
-    int Proposer::doPrepare(PaxosMsgPtr& p) {
+    int Proposer::doPrepare(std::shared_ptr<PaxosMsg>& p) {
         // send to local conn
         // then to remote
 
         auto majority = config_->total_acceptor_/2 + 1;
-        auto cb = [](){};
-        // TODO
 
         WaitGroup wg(majority);
+
+        std::atomic<int> sz{0};
+        std::shared_ptr<PaxosMsg> rsp[MAX_ACCEPTOR_NUM];
+
+        auto cb = [&](std::shared_ptr<PaxosMsg> msg)->int {
+            auto idx = sz.fetch_add(0);
+            rsp[idx] = std::move(msg);
+            wg.Notify();
+            return 0;
+        };
+
+        int ret = 0;
+        auto& local = conn_->GetLocalConn();
+        auto& remote = conn_->GetRemoteConn();
+
+        RpcReqData req = {config_->timeout_, cb, p};
+
+        if ((ret=local->DoRpcRequest(req))) {
+            return ret;
+        }
+
+        for (auto i = 0; i < remote.size(); ++i) {
+            remote[i]->DoRpcRequest(req);
+        }
+
         if (!wg.Wait(config_->timeout_)) return kPaxosErrCode_TIMEOUT;
 
         // TODO
-
+        // and what about memory access violation if a delayed rsp arrived.
         return 0;
     }
 
-    int Proposer::doAccept(PaxosMsgPtr& p) {
+    int Proposer::doAccept(std::shared_ptr<PaxosMsg>& p) {
         // send to local conn
         // then to remote
 

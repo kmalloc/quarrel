@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <functional>
 
 #include "ptype.h"
 #include "config.h"
@@ -11,27 +12,26 @@
 
 namespace quarrel {
 
-    using ResponseCallback = int(void*, int);
-    using RequestHandler = int (void*, int, ResponseCallback cb);
+    using ResponseCallback = std::function<int(std::shared_ptr<PaxosMsg>)>;
+    using RequestHandler = std::function<int (void*, int, ResponseCallback cb)>;
 
-    struct ReqData {
-        int size_;
-        uint32_t expire_ms;
+    struct RpcReqData {
+        uint32_t timeout_ms_;
         ResponseCallback cb_;
-        std::unique_ptr<uint8_t> data_;
+        std::shared_ptr<PaxosMsg> data_;
     };
 
+    // conn is a connection abstraction to an acceptor.
     class Conn {
         public:
-            Conn(AddrInfo& addr);
+            explicit Conn(AddrInfo addr);
             virtual ~Conn();
 
             int GetFd() const { return fd_; }
 
-            virtual int DoRequest(ReqData req) = 0;
-            virtual int DoResponse(std::unique_ptr<PaxosMsg> rsp) = 0;
-
-            virtual int HandleRecv(std::unique_ptr<PaxosMsg> req);
+            // DoRequest performs an asynchronsouly rpc reqeust to the connected acceptor.
+            // user must provide a callback for the returning response.
+            virtual int DoRpcRequest(RpcReqData req) = 0;
 
         private:
             Conn(const Conn&) = delete;
@@ -40,22 +40,31 @@ namespace quarrel {
         protected:
             int fd_;
             AddrInfo addr_;
-            RequestHandler onReq_;
     };
 
     class LocalConn : public Conn {
+        public:
+            LocalConn(AddrInfo addr);
     };
 
     class RemoteConn: public Conn {
+        public:
+            // HandleRecv handle msg received from the connected acceptor.
+            virtual int HandleRecv(std::unique_ptr<PaxosMsg> req) = 0;
+
         private:
-            LruMap<uint64_t, ReqData> req_;
+            RequestHandler onReq_;
+            LruMap<uint64_t, RpcReqData> req_;
     };
 
-    using ConnCreator = std::unique_ptr<Conn>(std::string, int);
+    using ConnCreator = std::unique_ptr<Conn>(AddrInfo);
 
     class ConnMng {
         public:
             explicit ConnMng(std::shared_ptr<Configure> config);
+
+            std::unique_ptr<LocalConn>& GetLocalConn();
+            std::vector<std::unique_ptr<RemoteConn>>& GetRemoteConn();
 
             // poll conn & recv.
             int StartWorker();
