@@ -7,7 +7,7 @@
 using namespace quarrel;
 
 TEST(lrumap, testapi) {
-    lru_map<int, int> m(3);
+    LruMap<int, int> m(3);
 
     m.put(1, 100);
     m.put(2, 102);

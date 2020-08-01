@@ -9,12 +9,12 @@
 namespace quarrel {
 
 template<typename key_t, typename value_t>
-class lru_map{
+class LruMap{
 public:
 	using key_value_pair_t = std::pair<key_t, value_t>;
 	using list_iterator_t = typename std::list<key_value_pair_t>::iterator;
 
-	lru_map(size_t max_size) : _max_size(max_size) {}
+	LruMap(size_t max_size) : _max_size(max_size) {}
 
 	void put(const key_t& key, value_t value) {
 		auto it = kv_.find(key);

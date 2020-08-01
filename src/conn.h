@@ -48,7 +48,7 @@ namespace quarrel {
 
     class RemoteConn: public Conn {
         private:
-            lru_map<uint64_t, ReqData> req_;
+            LruMap<uint64_t, ReqData> req_;
     };
 
     using ConnCreator = std::unique_ptr<Conn>(std::string, int);
