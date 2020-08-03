@@ -19,18 +19,18 @@ namespace quarrel {
     };
 
     enum PaxosMsgType {
-        kPaxosMsgType_INVALID = 0,
-        kPaxosMsgType_PREPARE_REQ = 1,
-        kPaxosMsgType_PREPARE_RSP = 2,
-        kPaxosMsgType_ACCEPT_REQ = 3,
-        kPaxosMsgType_ACCEPT_RSP = 4,
-        kPaxosMsgType_CHORE = 100,
+        kMsgType_INVALID = 0,
+        kMsgType_PREPARE_REQ = 1,
+        kMsgType_PREPARE_RSP = 2,
+        kMsgType_ACCEPT_REQ = 3,
+        kMsgType_ACCEPT_RSP = 4,
+        kMsgType_CHORE_REQ = 100,
     };
 
     enum PaxosErrCode {
-        kPaxosErrCode_INVALID = 0,
-        kPaxosErrCode_OOM = 3001,
-        kPaxosErrCode_TIMEOUT= 3002,
+        kErrCode_OK = 0,
+        kErrCode_OOM = 3001,
+        kErrCode_TIMEOUT= 3002,
     };
 
     constexpr int MAX_ACCEPTOR_NUM = 32;

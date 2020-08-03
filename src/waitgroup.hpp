@@ -38,6 +38,12 @@ class WaitGroup {
     return curr_ >= count_;
   }
 
+  void Reset(uint32_t count) {
+    std::lock_guard<decltype(mutex_)> lock(mutex_);
+    curr_ = 0;
+    count_ = count;
+  }
+
  private:
   uint32_t curr_;
   uint32_t count_;
