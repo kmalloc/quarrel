@@ -36,6 +36,7 @@ class Proposer {
     private:
         int doAccept(std::shared_ptr<PaxosMsg>& p);
         int doPrepare(std::shared_ptr<PaxosMsg>& p);
+        int doChosen(std::shared_ptr<PaxosMsg>& p);
         bool canSkipPrepare(uint64_t pinst, uint64_t entry);
         std::shared_ptr<BatchRpcContext> doBatchRpcRequest(int majority, std::shared_ptr<PaxosMsg>& pm);
 

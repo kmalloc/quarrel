@@ -44,7 +44,15 @@ namespace quarrel {
         pm->type_ = kMsgType_ACCEPT_REQ;
         pp->status_ = kPaxosState_PROMISED;
 
-        return doAccept(pm);
+        ret = doAccept(pm);
+
+        if (ret == kErrCode_OK) {
+            pm->type_ = kMsgType_CHOSEN_REQ;
+            pp->status_ = kPaxosState_ACCEPTED;
+            doChosen(pm);
+        }
+
+        return ret;
     }
 
     bool Proposer::canSkipPrepare(uint64_t pinst, uint64_t entry) {
@@ -170,5 +178,10 @@ namespace quarrel {
         }
 
         return kErrCode_NOT_QUORAUM;
+    }
+
+    int Proposer::doChosen(std::shared_ptr<PaxosMsg>& pm) {
+        doBatchRpcRequest(0, pm);
+        return kErrCode_OK;
     }
 }
