@@ -83,13 +83,13 @@ namespace quarrel {
 
             // HandleRecv handle msg received from the connected acceptor.
             virtual int HandleRecv(std::unique_ptr<PaxosMsg> req) {
-                auto cb = req_.GetPtr(req->reqid_);
+                auto rd = req_.GetPtr(req->reqid_);
                 auto noop = [](std::unique_ptr<PaxosMsg>){ return 0; };
-                if (!cb) {
+                if (!rd) {
                     return onReq_(std::move(req), noop);
                 }
 
-                cb->cb_(std::move(req));
+                rd->cb_(std::move(req));
                 req_.Del(req->reqid_);
                 return 0;
             }
