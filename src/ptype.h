@@ -31,6 +31,7 @@ namespace quarrel {
         kErrCode_OK = 0,
         kErrCode_OOM = 3001,
         kErrCode_TIMEOUT= 3002,
+        kErrCode_NOT_QUORAUM = 3003,
     };
 
     constexpr int MAX_ACCEPTOR_NUM = 32;
@@ -45,8 +46,9 @@ namespace quarrel {
 
         uint32_t size_; // sizeof value
         uint64_t opaque_; // opaque data for value used by upper application
+        uint64_t value_id_; // an unique id for every proposed value.
 
-        uint8_t data_[1]; // google struct hack
+        uint8_t data_[1]; // struct hack
     } __attribute__((packed, aligned(1)));
 
     struct PaxosMsg {

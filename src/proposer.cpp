@@ -27,6 +27,8 @@ namespace quarrel {
         pp->pentry_ = entry;
         pp->opaque_ = opaque;
         pp->proposer_ = config_->local_id_;
+        pp->value_id_ = pmn_->GenValueId(pinst, pid);
+
         memcpy(pp->data_, val.data(), val.size());
 
         int ret = 0;
@@ -49,7 +51,7 @@ namespace quarrel {
         return false;
     }
 
-    int Proposer::doPrepare(std::shared_ptr<PaxosMsg>& p) {
+    int Proposer::doPrepare(std::shared_ptr<PaxosMsg>& pm) {
         // send to local conn
         // then to remote
 
@@ -64,6 +66,7 @@ namespace quarrel {
         rsp->resize(config_->total_acceptor_);
 
         auto cb = [sz, wg, rsp](std::shared_ptr<PaxosMsg> msg)->int {
+            // delayed rsp will be ignored.
             auto idx = sz->fetch_add(1);
             (*rsp)[idx] = std::move(msg);
             wg->Notify();
@@ -74,7 +77,7 @@ namespace quarrel {
         auto& local = conn_->GetLocalConn();
         auto& remote = conn_->GetRemoteConn();
 
-        RpcReqData req = {config_->timeout_, cb, p};
+        RpcReqData req{config_->timeout_, cb, pm};
 
         if ((ret=local->DoRpcRequest(req))) {
             return ret;
@@ -86,8 +89,40 @@ namespace quarrel {
 
         if (!wg->Wait(config_->timeout_)) return kErrCode_TIMEOUT;
 
-        // TODO
-        return 0;
+        int valid_rsp = 0;
+        std::shared_ptr<PaxosMsg> last_voted;
+        auto origin_proposal = reinterpret_cast<Proposal*>(pm->data_);
+
+        for (auto idx = 0; idx < *sz; ++idx) {
+            std::shared_ptr<PaxosMsg> m = std::move((*rsp)[idx]);
+            auto rsp_proposal = reinterpret_cast<Proposal*>(pm->data_);
+
+            if (rsp_proposal->pid_ > origin_proposal->pid_) {
+                // rejected
+                pmn_->SetPrepaeIdGreaterThan(origin_proposal->plid_, origin_proposal->pentry_, rsp_proposal->pid_);
+                continue;
+            }
+
+            if (rsp_proposal->value_id_ != origin_proposal->value_id_ || rsp_proposal->opaque_ != origin_proposal->opaque_) {
+                // peer responses with last vote
+                auto lastp = reinterpret_cast<Proposal*>(last_voted->data_);
+                if (last_voted.get() == NULL || lastp->pid_ < rsp_proposal->pid_) {
+                    // last vote with the largest prepare id.
+                    last_voted = m;
+                }
+            }
+
+            ++valid_rsp;
+        }
+
+        if (valid_rsp >= majority) {
+            if (last_voted) {
+                pm = std::move(last_voted);
+            }
+            return kErrCode_OK;
+        }
+
+        return kErrCode_NOT_QUORAUM;
     }
 
     int Proposer::doAccept(std::shared_ptr<PaxosMsg>& p) {
