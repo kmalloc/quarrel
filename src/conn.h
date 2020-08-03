@@ -5,15 +5,17 @@
 #include <vector>
 #include <memory>
 #include <functional>
+#include <sys/time.h>
 
 #include "ptype.h"
 #include "config.h"
+#include "idgen.hpp"
 #include "lrumap.hpp"
 
 namespace quarrel {
 
-    using ResponseCallback = std::function<int(std::shared_ptr<PaxosMsg>)>;
-    using RequestHandler = std::function<int (void*, int, ResponseCallback cb)>;
+    using ResponseCallback = std::function<int(std::unique_ptr<PaxosMsg>)>;
+    using RequestHandler = std::function<int (std::unique_ptr<PaxosMsg> ptr, ResponseCallback cb)>;
 
     struct RpcReqData {
         uint32_t timeout_ms_;
@@ -59,18 +61,36 @@ namespace quarrel {
     class RemoteConn: public Conn {
         public:
             RemoteConn(int concur_num, AddrInfo addr)
-            : Conn(ConnType_Remote, std::move(addr)), req_(concur_num) {}
+            : Conn(ConnType_Remote, std::move(addr)), reqid_(1,1), req_(concur_num) {
+                struct timeval tv;
+                gettimeofday(&tv, NULL);
+                reqid_.SetGreatThan(tv.tv_sec & 0xff);
+            }
 
             virtual ~RemoteConn() {}
 
             virtual int DoRpcRequest(RpcReqData req) {
-                // TODO
-                return 0;
+                req.data_->reqid_ = reqid_.GetAndInc();
+                req_.Put(req.data_->reqid_, req);
+                auto ret = DoWrite(req.data_);
+                if (ret != kErrCode_OK) {
+                    req_.Del(req.data_->reqid_);
+                    return ret;
+                }
+
+                return kErrCode_OK;
             }
 
             // HandleRecv handle msg received from the connected acceptor.
             virtual int HandleRecv(std::unique_ptr<PaxosMsg> req) {
-                // TODO
+                auto cb = req_.GetPtr(req->reqid_);
+                auto noop = [](std::unique_ptr<PaxosMsg>){ return 0; };
+                if (!cb) {
+                    return onReq_(std::move(req), noop);
+                }
+
+                cb->cb_(std::move(req));
+                req_.Del(req->reqid_);
                 return 0;
             }
 
@@ -78,6 +98,7 @@ namespace quarrel {
             virtual int DoWrite(std::shared_ptr<PaxosMsg> msg) = 0;
 
         private:
+            IdGen reqid_;
             RequestHandler onReq_;
             LruMap<uint64_t, RpcReqData> req_;
     };

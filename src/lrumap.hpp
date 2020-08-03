@@ -33,12 +33,21 @@ public:
 	}
 
 	const value_t& Get(const key_t& key) {
+        auto ptr = GetPtr(key);
+        if (ptr == NULL) {
+            throw std::range_error("key not exists");
+        }
+
+        return *ptr;
+	}
+
+	const value_t* GetPtr(const key_t& key) {
 		auto it = kv_.find(key);
 		if (it == kv_.end()) {
-			throw std::range_error("key not exists");
+            return NULL;
 		} else {
 			order_.splice(order_.begin(), order_, it->second);
-			return it->second->second;
+			return &it->second->second;
 		}
 	}
 

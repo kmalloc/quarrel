@@ -17,7 +17,7 @@ struct BatchRpcContext {
     int ret_;
     WaitGroup wg_;
     std::atomic<int> rsp_count_;
-    std::shared_ptr<PaxosMsg> rsp_msg_[MAX_ACCEPTOR_NUM];
+    std::unique_ptr<PaxosMsg> rsp_msg_[MAX_ACCEPTOR_NUM];
 
     BatchRpcContext(int expect_rsp_count): wg_(expect_rsp_count), rsp_count_(0) {}
 };

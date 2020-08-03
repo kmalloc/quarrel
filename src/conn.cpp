@@ -16,5 +16,4 @@ namespace quarrel {
 
         return i + 1;
     }
-
 }

@@ -69,7 +69,7 @@ namespace quarrel {
         // so that when a delayed msg arrives, there won't be any memory access violation
         auto ctx = std::make_shared<BatchRpcContext>(majority);
 
-        auto cb = [ctx](std::shared_ptr<PaxosMsg> msg)->int {
+        auto cb = [ctx](std::unique_ptr<PaxosMsg> msg)->int {
             // delayed rsp will be ignored.
             auto idx = ctx->rsp_count_.fetch_add(1);
             ctx->rsp_msg_[idx] = std::move(msg);
@@ -105,7 +105,7 @@ namespace quarrel {
         // then to remote
 
         int valid_rsp = 0;
-        std::shared_ptr<PaxosMsg> last_voted;
+        std::unique_ptr<PaxosMsg> last_voted;
         auto majority = config_->total_acceptor_/2 + 1;
         auto origin_proposal = reinterpret_cast<Proposal*>(pm->data_);
 
@@ -113,7 +113,7 @@ namespace quarrel {
         if (ctx->ret_ != kErrCode_OK) return ctx->ret_;
 
         for (auto idx = 0; idx < ctx->rsp_count_; ++idx) {
-            std::shared_ptr<PaxosMsg> m = std::move(ctx->rsp_msg_[idx]);
+            std::unique_ptr<PaxosMsg> m = std::move(ctx->rsp_msg_[idx]);
             auto rsp_proposal = reinterpret_cast<Proposal*>(pm->data_);
 
             if (rsp_proposal->pid_ > origin_proposal->pid_) {
@@ -155,7 +155,7 @@ namespace quarrel {
 
         int valid_rsp = 0;
         for (auto idx = 0; idx < ctx->rsp_count_; ++idx) {
-            std::shared_ptr<PaxosMsg> m = std::move(ctx->rsp_msg_[idx]);
+            std::unique_ptr<PaxosMsg> m = std::move(ctx->rsp_msg_[idx]);
             auto rsp_proposal = reinterpret_cast<Proposal*>(pm->data_);
 
             if (rsp_proposal->pid_ > origin_proposal->pid_) {
