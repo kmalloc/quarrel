@@ -5,7 +5,6 @@
 #include <vector>
 
 namespace quarrel {
-
     struct AddrInfo {
         int type_; // addr type, 1 for ipv4 2 for ipv6 3 for in-process queue(for testing).
         std::string addr_;

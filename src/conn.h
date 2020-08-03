@@ -21,11 +21,17 @@ namespace quarrel {
         std::shared_ptr<PaxosMsg> data_;
     };
 
+    enum ConnType {
+        ConnType_INVALID = 0,
+        ConnType_LOCAL = 1,
+        ConnType_Remote = 2,
+    };
+
     // conn is a connection abstraction to an acceptor.
     class Conn {
         public:
-            explicit Conn(AddrInfo addr);
-            virtual ~Conn();
+            explicit Conn(AddrInfo addr): fd_(-1), addr_(std::move(addr)) {}
+            virtual ~Conn() {}
 
             int GetFd() const { return fd_; }
 
@@ -57,25 +63,38 @@ namespace quarrel {
             LruMap<uint64_t, RpcReqData> req_;
     };
 
-    using ConnCreator = std::unique_ptr<Conn>(AddrInfo);
+    using ConnCreator = std::function<std::unique_ptr<Conn>(AddrInfo)>;
 
     class ConnMng {
         public:
-            explicit ConnMng(std::shared_ptr<Configure> config);
+            explicit ConnMng(std::shared_ptr<Configure> config): config_(std::move(config)) {}
 
-            std::unique_ptr<LocalConn>& GetLocalConn();
-            std::vector<std::unique_ptr<RemoteConn>>& GetRemoteConn();
+            int CreateConn();
 
             // poll conn & recv.
             int StartWorker();
             int StopWorker();
 
+            void SetConnCreator(ConnCreator creator) {
+                conn_creator_ = std::move(creator);
+            }
+
+            std::unique_ptr<LocalConn>& GetLocalConn() {
+                return local_conn_;
+            }
+
+            std::vector<std::unique_ptr<RemoteConn>>& GetRemoteConn() {
+                return remote_conn_;
+            }
+
         private:
             ConnMng(const ConnMng&) = delete;
             ConnMng& operator=(const ConnMng&) = delete;
 
+            ConnCreator conn_creator_;
+            std::shared_ptr<Configure> config_;
             std::unique_ptr<LocalConn> local_conn_;
-            std::vector<std::unique_ptr<Conn>> remote_conn_;
+            std::vector<std::unique_ptr<RemoteConn>> remote_conn_;
     };
 }
 
