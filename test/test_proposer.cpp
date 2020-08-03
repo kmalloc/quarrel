@@ -16,6 +16,10 @@ struct DummyConn: public Conn {
     virtual ~DummyConn() {}
 };
 
+struct DummyLocalConn: public DummyConn {
+    DummyLocalConn(AddrInfo addr): DummyConn(std::move(addr)) {}
+};
+
 struct DummyRemoteConn: public DummyConn {
     public:
         DummyRemoteConn(AddrInfo addr): DummyConn(std::move(addr)) {}
@@ -33,11 +37,15 @@ TEST(proposer, doPropose) {
     config->peer_.push_back({ConnType_Remote, "aaaa2:bb2"});
 
     auto conn_creator = [](AddrInfo addr) -> std::unique_ptr<Conn> {
-        if (addr.type_ == ConnType_LOCAL) return std::unique_ptr<DummyConn>(new DummyConn(std::move(addr)));
+        if (addr.type_ == ConnType_LOCAL) return std::unique_ptr<DummyLocalConn>(new DummyLocalConn(std::move(addr)));
 
         return std::unique_ptr<DummyRemoteConn>(new DummyRemoteConn(std::move(addr)));
     };
 
     ConnMng conn_mng(config);
+
     conn_mng.SetConnCreator(conn_creator);
+    ASSERT_EQ(3, conn_mng.CreateConn());
+
+    // TODO
 }

@@ -7,7 +7,7 @@ INCLUDE := -I /usr/local/include/gtest/ -I./src
 
 # List of all .cpp source files.
 CPP = $(wildcard src/*.cpp) #$(wildcard src/*.hpp)
-TEST = $(wildcard test/*.cpp) src/logger.cpp
+TEST = $(wildcard test/*.cpp) src/logger.cpp src/conn.cpp
 
 # All .o files go to build dir.
 OBJ = $(CPP:%.cpp=$(BUILD_DIR)/%.o)
@@ -44,4 +44,4 @@ $(BUILD_DIR)/%.o : %.cpp
 .PHONY : clean
 clean :
 	# This should remove all generated files.
-	-rm $(BUILD_DIR)/**/*.o 
+	-rm $(BUILD_DIR)/**/*.o
