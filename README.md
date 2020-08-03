@@ -1,1 +1,1 @@
-a multipaxos implementation for fun.
+an educational multipaxos implementation for fun.

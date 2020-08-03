@@ -60,6 +60,7 @@ namespace quarrel {
         // optimizations to follow:
         // 1. #0 proposal opmitization.
         // 2. or master optimization.
+        // 3. batch request for multiple paxos entry.
         return false;
     }
 
