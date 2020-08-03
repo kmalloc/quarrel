@@ -12,10 +12,11 @@ namespace quarrel {
 
     enum PaxosState {
         kPaxosState_INIT = 0,
-        kPaxosState_PREPARE = 1,
-        kPaxosState_PROMISE = 2,
+        kPaxosState_PREPARED = 1,
+        kPaxosState_PROMISED = 2,
         kPaxosState_ACCEPTED = 3,
-        kPaxosState_COMMITED = 4,
+        kPaxosState_CHOSEN   = 4,
+        kPaxosState_COMMITED = 5,
     };
 
     enum PaxosMsgType {
@@ -24,7 +25,7 @@ namespace quarrel {
         kMsgType_PREPARE_RSP = 2,
         kMsgType_ACCEPT_REQ = 3,
         kMsgType_ACCEPT_RSP = 4,
-        kMsgType_CHORE_REQ = 100,
+        kMsgType_CHORE_REQ = 101,
     };
 
     enum PaxosErrCode {
@@ -45,6 +46,7 @@ namespace quarrel {
         uint16_t proposer_;
 
         uint32_t size_; // sizeof value
+        uint32_t status_;
         uint64_t opaque_; // opaque data for value used by upper application
         uint64_t value_id_; // an unique id for every proposed value.
 

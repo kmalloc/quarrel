@@ -27,6 +27,7 @@ namespace quarrel {
         pp->pentry_ = entry;
         pp->opaque_ = opaque;
         pp->proposer_ = config_->local_id_;
+        pp->status_ = kPaxosState_PREPARED;
         pp->value_id_ = pmn_->GenValueId(pinst, pid);
 
         memcpy(pp->data_, val.data(), val.size());
@@ -42,6 +43,7 @@ namespace quarrel {
         }
 
         pm->type_ = kMsgType_ACCEPT_REQ;
+        pp->status_ = kPaxosState_PROMISED;
 
         return doAccept(pm);
     }
@@ -51,25 +53,29 @@ namespace quarrel {
         return false;
     }
 
+    struct CallbackContext {
+        WaitGroup wg;
+        std::atomic<int> rsp_count_;
+        std::shared_ptr<PaxosMsg> rsp_msg_[MAX_ACCEPTOR_NUM];
+
+        CallbackContext(int count): wg(count), rsp_count_(0) {}
+    };
+
     int Proposer::doPrepare(std::shared_ptr<PaxosMsg>& pm) {
         // send to local conn
         // then to remote
 
         auto majority = config_->total_acceptor_/2 + 1;
 
-        // following shared objects must be put on heap.
+        // shared objects must be put on heap.
         // so that when a delayed msg arrives, there won't be any memory access violation
-        auto sz = std::make_shared<std::atomic<int>>();
-        auto wg = std::make_shared<WaitGroup>(majority);
-        auto rsp = std::make_shared<std::vector<std::shared_ptr<PaxosMsg>>>();
+        auto ctx = std::make_shared<CallbackContext>(majority);
 
-        rsp->resize(config_->total_acceptor_);
-
-        auto cb = [sz, wg, rsp](std::shared_ptr<PaxosMsg> msg)->int {
+        auto cb = [ctx](std::shared_ptr<PaxosMsg> msg)->int {
             // delayed rsp will be ignored.
-            auto idx = sz->fetch_add(1);
-            (*rsp)[idx] = std::move(msg);
-            wg->Notify();
+            auto idx = ctx->rsp_count_.fetch_add(1);
+            ctx->rsp_msg_[idx] = std::move(msg);
+            ctx->wg.Notify();
             return 0;
         };
 
@@ -87,14 +93,14 @@ namespace quarrel {
             remote[i]->DoRpcRequest(req);
         }
 
-        if (!wg->Wait(config_->timeout_)) return kErrCode_TIMEOUT;
+        if (!ctx->wg.Wait(config_->timeout_)) return kErrCode_TIMEOUT;
 
         int valid_rsp = 0;
         std::shared_ptr<PaxosMsg> last_voted;
         auto origin_proposal = reinterpret_cast<Proposal*>(pm->data_);
 
-        for (auto idx = 0; idx < *sz; ++idx) {
-            std::shared_ptr<PaxosMsg> m = std::move((*rsp)[idx]);
+        for (auto idx = 0; idx < ctx->rsp_count_; ++idx) {
+            std::shared_ptr<PaxosMsg> m = std::move(ctx->rsp_msg_[idx]);
             auto rsp_proposal = reinterpret_cast<Proposal*>(pm->data_);
 
             if (rsp_proposal->pid_ > origin_proposal->pid_) {
