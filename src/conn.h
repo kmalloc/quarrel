@@ -29,8 +29,8 @@ namespace quarrel {
 
             int GetFd() const { return fd_; }
 
-            // DoRequest performs an asynchronsouly rpc reqeust to the connected acceptor.
-            // user must provide a callback for the returning response.
+            // DoRequest performs an *ASYNCHRONOUS* rpc reqeust to the connected acceptor.
+            // user must provide a callback for storing the conresponding response.
             virtual int DoRpcRequest(RpcReqData req) = 0;
 
         private:
