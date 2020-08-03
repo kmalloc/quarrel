@@ -6,11 +6,21 @@
 #include "config.h"
 #include "ptype.h"
 #include "idgen.hpp"
+#include "waitgroup.hpp"
 
 #include <vector>
 #include <memory>
 
 namespace quarrel {
+
+struct BatchRpcContext {
+    int ret_;
+    WaitGroup wg_;
+    std::atomic<int> rsp_count_;
+    std::shared_ptr<PaxosMsg> rsp_msg_[MAX_ACCEPTOR_NUM];
+
+    BatchRpcContext(int expect_rsp_count): wg_(expect_rsp_count), rsp_count_(0) {}
+};
 
 class Proposer {
     public:
@@ -27,6 +37,7 @@ class Proposer {
         int doAccept(std::shared_ptr<PaxosMsg>& p);
         int doPrepare(std::shared_ptr<PaxosMsg>& p);
         bool canSkipPrepare(uint64_t pinst, uint64_t entry);
+        std::shared_ptr<BatchRpcContext> doBatchRpcRequest(int majority, std::shared_ptr<PaxosMsg>& pm);
 
     private:
         std::shared_ptr<PlogMng> pmn_;

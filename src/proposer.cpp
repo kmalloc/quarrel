@@ -1,6 +1,5 @@
 #include "proposer.h"
 #include "logger.h"
-#include "waitgroup.hpp"
 
 #include <atomic>
 
@@ -53,51 +52,53 @@ namespace quarrel {
         return false;
     }
 
-    struct CallbackContext {
-        WaitGroup wg;
-        std::atomic<int> rsp_count_;
-        std::shared_ptr<PaxosMsg> rsp_msg_[MAX_ACCEPTOR_NUM];
-
-        CallbackContext(int count): wg(count), rsp_count_(0) {}
-    };
-
-    int Proposer::doPrepare(std::shared_ptr<PaxosMsg>& pm) {
-        // send to local conn
-        // then to remote
-
-        auto majority = config_->total_acceptor_/2 + 1;
-
+    std::shared_ptr<BatchRpcContext> Proposer::doBatchRpcRequest(int majority, std::shared_ptr<PaxosMsg>& pm) {
         // shared objects must be put on heap.
         // so that when a delayed msg arrives, there won't be any memory access violation
-        auto ctx = std::make_shared<CallbackContext>(majority);
+        auto ctx = std::make_shared<BatchRpcContext>(majority);
 
         auto cb = [ctx](std::shared_ptr<PaxosMsg> msg)->int {
             // delayed rsp will be ignored.
             auto idx = ctx->rsp_count_.fetch_add(1);
             ctx->rsp_msg_[idx] = std::move(msg);
-            ctx->wg.Notify();
+            ctx->wg_.Notify();
             return 0;
         };
 
-        int ret = 0;
+        ctx->ret_ = kErrCode_OK;
         auto& local = conn_->GetLocalConn();
         auto& remote = conn_->GetRemoteConn();
 
         RpcReqData req{config_->timeout_, cb, pm};
 
+        auto ret = 0;
         if ((ret=local->DoRpcRequest(req))) {
-            return ret;
+            ctx->ret_ = ret;
+            return std::move(ctx);
         }
 
         for (auto i = 0; i < remote.size(); ++i) {
             remote[i]->DoRpcRequest(req);
         }
 
-        if (!ctx->wg.Wait(config_->timeout_)) return kErrCode_TIMEOUT;
+        if (!ctx->wg_.Wait(config_->timeout_)) {
+            ctx->ret_ = kErrCode_TIMEOUT;
+        }
+
+        return ctx;
+    }
+
+    int Proposer::doPrepare(std::shared_ptr<PaxosMsg>& pm) {
+        // send to local conn
+        // then to remote
 
         int valid_rsp = 0;
         std::shared_ptr<PaxosMsg> last_voted;
+        auto majority = config_->total_acceptor_/2 + 1;
         auto origin_proposal = reinterpret_cast<Proposal*>(pm->data_);
+
+        auto ctx = doBatchRpcRequest(majority, pm);
+        if (ctx->ret_ != kErrCode_OK) return ctx->ret_;
 
         for (auto idx = 0; idx < ctx->rsp_count_; ++idx) {
             std::shared_ptr<PaxosMsg> m = std::move(ctx->rsp_msg_[idx]);
@@ -131,10 +132,43 @@ namespace quarrel {
         return kErrCode_NOT_QUORAUM;
     }
 
-    int Proposer::doAccept(std::shared_ptr<PaxosMsg>& p) {
+    int Proposer::doAccept(std::shared_ptr<PaxosMsg>& pm) {
         // send to local conn
         // then to remote
+        auto majority = config_->total_acceptor_/2 + 1;
+        auto origin_proposal = reinterpret_cast<Proposal*>(pm->data_);
 
-        return 0;
+        auto ctx = doBatchRpcRequest(majority, pm);
+        if (ctx->ret_ != kErrCode_OK) return ctx->ret_;
+
+        int valid_rsp = 0;
+        for (auto idx = 0; idx < ctx->rsp_count_; ++idx) {
+            std::shared_ptr<PaxosMsg> m = std::move(ctx->rsp_msg_[idx]);
+            auto rsp_proposal = reinterpret_cast<Proposal*>(pm->data_);
+
+            if (rsp_proposal->pid_ > origin_proposal->pid_) {
+                // rejected
+                pmn_->SetPrepaeIdGreaterThan(origin_proposal->plid_, origin_proposal->pentry_, rsp_proposal->pid_);
+                continue;
+            }
+
+            if (rsp_proposal->value_id_ != origin_proposal->value_id_ || rsp_proposal->opaque_ != origin_proposal->opaque_) {
+                // peer responses with last vote
+                // not possible without fast-accept enabled.
+                // FIXME
+                LOG_ERR << "invalid doAccept rsp from peer(" << pm->to_ << "), value id is changed, rsp:("
+                        << rsp_proposal->value_id_ << "," << rsp_proposal->opaque_ << "), origin:("
+                        << origin_proposal->value_id_ << "," << rsp_proposal->opaque_ << ")";
+                continue;
+            }
+
+            ++valid_rsp;
+        }
+
+        if (valid_rsp >= majority) {
+            return kErrCode_OK;
+        }
+
+        return kErrCode_NOT_QUORAUM;
     }
 }
