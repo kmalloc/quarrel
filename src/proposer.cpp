@@ -48,7 +48,7 @@ namespace quarrel {
 
         if (ret == kErrCode_OK) {
             pm->type_ = kMsgType_CHOSEN_REQ;
-            pp->status_ = kPaxosState_ACCEPTED;
+            pp->status_ = kPaxosState_CHOSEN;
             doChosen(pm);
         }
 
