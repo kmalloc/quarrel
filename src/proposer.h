@@ -31,7 +31,7 @@ class Proposer {
         void SetConnMng(std::shared_ptr<ConnMng> mng) { conn_ = std::move(mng); }
 
         // propose a value
-        // current implementation permits concurrent Propose() from within different thread.
+        // current implementation permits concurrent Propose() from different threads.
         // this is no harm at the cost of some performance overhead, which can be avoided by putting requests in a queue.
         int Propose(uint64_t opaque, const std::string& val, uint64_t paxos_inst = 0);
 
