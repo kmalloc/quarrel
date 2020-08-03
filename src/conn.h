@@ -39,8 +39,8 @@ namespace quarrel {
             int GetType() const { return type_; }
             const AddrInfo& GetAddr() const { return addr_; }
 
-            // DoRequest performs an *ASYNCHRONOUS* rpc reqeust to the connected acceptor.
-            // user must provide a callback for storing the conresponding response.
+            // DoRpcRequest performs an *ASYNCHRONOUS* rpc reqeust to the connected acceptor.
+            // user must provide a callback for storing the corresponding response.
             virtual int DoRpcRequest(RpcReqData req) = 0;
 
         private:
