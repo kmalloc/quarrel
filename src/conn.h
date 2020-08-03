@@ -30,10 +30,12 @@ namespace quarrel {
     // conn is a connection abstraction to an acceptor.
     class Conn {
         public:
-            explicit Conn(AddrInfo addr): fd_(-1), addr_(std::move(addr)) {}
+            Conn(int type, AddrInfo addr): fd_(-1), type_(type), addr_(std::move(addr)) {}
             virtual ~Conn() {}
 
             int GetFd() const { return fd_; }
+            int GetType() const { return type_; }
+            const AddrInfo& GetAddr() const { return addr_; }
 
             // DoRequest performs an *ASYNCHRONOUS* rpc reqeust to the connected acceptor.
             // user must provide a callback for storing the conresponding response.
@@ -45,18 +47,35 @@ namespace quarrel {
 
         protected:
             int fd_;
+            int type_;
             AddrInfo addr_;
     };
 
     class LocalConn : public Conn {
         public:
-            LocalConn(AddrInfo addr);
+            explicit LocalConn(AddrInfo addr): Conn(ConnType_LOCAL, std::move(addr)) {}
     };
 
     class RemoteConn: public Conn {
         public:
+            RemoteConn(int concur_num, AddrInfo addr)
+            : Conn(ConnType_Remote, std::move(addr)), req_(concur_num) {}
+
+            virtual ~RemoteConn() {}
+
+            virtual int DoRpcRequest(RpcReqData req) {
+                // TODO
+                return 0;
+            }
+
             // HandleRecv handle msg received from the connected acceptor.
-            virtual int HandleRecv(std::unique_ptr<PaxosMsg> req) = 0;
+            virtual int HandleRecv(std::unique_ptr<PaxosMsg> req) {
+                // TODO
+                return 0;
+            }
+
+            // implementation needed
+            virtual int DoWrite(std::shared_ptr<PaxosMsg> msg) = 0;
 
         private:
             RequestHandler onReq_;

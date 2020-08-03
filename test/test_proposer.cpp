@@ -7,23 +7,22 @@
 
 using namespace quarrel;
 
-struct DummyConn: public Conn {
-    DummyConn(AddrInfo addr): Conn(std::move(addr)) {}
-    virtual int DoRpcRequest(RpcReqData data) {
-        data.cb_(data.data_);
-        return 0;
-    }
-    virtual ~DummyConn() {}
-};
-
-struct DummyLocalConn: public DummyConn {
-    DummyLocalConn(AddrInfo addr): DummyConn(std::move(addr)) {}
-};
-
-struct DummyRemoteConn: public DummyConn {
+struct DummyLocalConn: public LocalConn {
     public:
-        DummyRemoteConn(AddrInfo addr): DummyConn(std::move(addr)) {}
-        virtual int HandleRecv(std::unique_ptr<PaxosMsg> req) {
+        DummyLocalConn(AddrInfo addr): LocalConn(std::move(addr)) {}
+
+        virtual int DoRpcRequest(RpcReqData data) {
+            data.cb_(data.data_);
+            return 0;
+        }
+};
+
+struct DummyRemoteConn: public RemoteConn {
+    public:
+        DummyRemoteConn(AddrInfo addr): RemoteConn(100, std::move(addr)) {}
+        virtual ~DummyRemoteConn() {}
+
+        virtual int DoWrite(std::shared_ptr<PaxosMsg> req) {
             return 0;
         }
 };
@@ -46,6 +45,18 @@ TEST(proposer, doPropose) {
 
     conn_mng.SetConnCreator(conn_creator);
     ASSERT_EQ(3, conn_mng.CreateConn());
+
+    auto& local = conn_mng.GetLocalConn();
+    ASSERT_EQ(ConnType_LOCAL, local->GetType());
+    ASSERT_STREQ("xxxx:yyy", local->GetAddr().addr_.c_str());
+
+    auto& r1 = conn_mng.GetRemoteConn()[0];
+    auto& r2 = conn_mng.GetRemoteConn()[1];
+
+    ASSERT_EQ(ConnType_Remote, r1->GetType());
+    ASSERT_STREQ("aaaa:bb", r1->GetAddr().addr_.c_str());
+    ASSERT_EQ(ConnType_Remote, r2->GetType());
+    ASSERT_STREQ("aaaa2:bb2", r2->GetAddr().addr_.c_str());
 
     // TODO
 }

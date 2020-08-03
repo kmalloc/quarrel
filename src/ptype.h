@@ -35,6 +35,7 @@ namespace quarrel {
         kErrCode_OOM = 3001,
         kErrCode_TIMEOUT= 3002,
         kErrCode_NOT_QUORAUM = 3003,
+        kErrCode_CONN_FAIL = 3004,
     };
 
     constexpr int MAX_ACCEPTOR_NUM = 32;
