@@ -57,6 +57,9 @@ namespace quarrel {
 
     bool Proposer::canSkipPrepare(uint64_t pinst, uint64_t entry) {
         // TODO
+        // optimizations to follow:
+        // 1. #0 proposal opmitization.
+        // 2. or master optimization.
         return false;
     }
 
@@ -123,7 +126,7 @@ namespace quarrel {
                 auto lastp = reinterpret_cast<Proposal*>(last_voted->data_);
                 if (last_voted.get() == NULL || lastp->pid_ < rsp_proposal->pid_) {
                     // last vote with the largest prepare id.
-                    last_voted = m;
+                    last_voted = std::move(m);
                 }
             }
 
@@ -161,7 +164,6 @@ namespace quarrel {
             }
 
             if (rsp_proposal->value_id_ != origin_proposal->value_id_ || rsp_proposal->opaque_ != origin_proposal->opaque_) {
-                // peer responses with last vote
                 // not possible without fast-accept enabled.
                 // FIXME
                 LOG_ERR << "invalid doAccept rsp from peer(" << pm->to_ << "), value id is changed, rsp:("
