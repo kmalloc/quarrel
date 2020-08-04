@@ -4,6 +4,7 @@
 #include "ptype.h"
 
 #include <atomic>
+#include <sys/time.h>
 
 namespace quarrel {
     class IdGen {
@@ -20,6 +21,15 @@ namespace quarrel {
         private:
             uint64_t step_;
             std::atomic<uint64_t> id_;
+    };
+
+    class IdGenByDate: public IdGen {
+        public:
+            IdGenByDate(uint64_t mask, uint64_t step): IdGen(1, step) {
+                struct timeval tv;
+                gettimeofday(&tv, NULL);
+                SetGreatThan(tv.tv_sec & mask);
+            }
     };
 }
 

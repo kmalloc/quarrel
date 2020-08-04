@@ -5,7 +5,6 @@
 #include <vector>
 #include <memory>
 #include <functional>
-#include <sys/time.h>
 
 #include "ptype.h"
 #include "config.h"
@@ -14,8 +13,8 @@
 
 namespace quarrel {
 
-    using ResponseCallback = std::function<int(std::unique_ptr<PaxosMsg>)>;
-    using RequestHandler = std::function<int (std::unique_ptr<PaxosMsg> ptr, ResponseCallback cb)>;
+    using ResponseCallback = std::function<int(std::shared_ptr<PaxosMsg>)>;
+    using RequestHandler = std::function<int (std::shared_ptr<PaxosMsg> ptr, ResponseCallback cb)>;
 
     struct RpcReqData {
         uint32_t timeout_ms_;
@@ -61,10 +60,7 @@ namespace quarrel {
     class RemoteConn: public Conn {
         public:
             RemoteConn(int concur_num, AddrInfo addr)
-            : Conn(ConnType_Remote, std::move(addr)), reqid_(1,1), req_(concur_num) {
-                struct timeval tv;
-                gettimeofday(&tv, NULL);
-                reqid_.SetGreatThan(tv.tv_sec & 0xff);
+            : Conn(ConnType_Remote, std::move(addr)), reqid_(0xff,1), req_(concur_num) {
             }
 
             virtual ~RemoteConn() {}
@@ -82,9 +78,9 @@ namespace quarrel {
             }
 
             // HandleRecv handle msg received from the connected acceptor.
-            virtual int HandleRecv(std::unique_ptr<PaxosMsg> req) {
+            virtual int HandleRecv(std::shared_ptr<PaxosMsg> req) {
                 auto rd = req_.GetPtr(req->reqid_);
-                auto noop = [](std::unique_ptr<PaxosMsg>){ return 0; };
+                auto noop = [](std::shared_ptr<PaxosMsg>){ return 0; };
                 if (!rd) {
                     return onReq_(std::move(req), noop);
                 }
@@ -98,7 +94,7 @@ namespace quarrel {
             virtual int DoWrite(std::shared_ptr<PaxosMsg> msg) = 0;
 
         private:
-            IdGen reqid_;
+            IdGenByDate reqid_;
             RequestHandler onReq_;
             LruMap<uint64_t, RpcReqData> req_;
     };

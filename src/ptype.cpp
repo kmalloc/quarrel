@@ -1,5 +1,6 @@
 #include "ptype.h"
 
+#include <string.h>
 
 namespace quarrel {
     std::shared_ptr<PaxosMsg> AllocProposalMsg(uint32_t value_size) {
@@ -17,5 +18,14 @@ namespace quarrel {
 
         std::shared_ptr<PaxosMsg> p(rp, free);
         return p;
+    }
+
+    std::shared_ptr<PaxosMsg> CloneProposalMsg(const PaxosMsg& pm) {
+        auto pp = reinterpret_cast<const Proposal*>(pm.data_);
+        auto value_size = pp->size_;
+
+        auto rp = AllocProposalMsg(value_size);
+        memcpy(rp.get(), &pm, PaxosMsgHeaderSz + ProposalHeaderSz + value_size);
+        return rp;
     }
 }

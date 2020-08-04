@@ -7,7 +7,7 @@ INCLUDE := -I /usr/local/include/gtest/ -I./src
 
 # List of all .cpp source files.
 CPP = $(wildcard src/*.cpp) #$(wildcard src/*.hpp)
-TEST = $(wildcard test/*.cpp) src/logger.cpp src/conn.cpp
+TEST = $(wildcard test/*.cpp) src/logger.cpp src/conn.cpp src/ptype.cpp 
 
 # All .o files go to build dir.
 OBJ = $(CPP:%.cpp=$(BUILD_DIR)/%.o)

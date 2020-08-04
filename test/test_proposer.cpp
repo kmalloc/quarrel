@@ -12,7 +12,8 @@ struct DummyLocalConn: public LocalConn {
         DummyLocalConn(AddrInfo addr): LocalConn(std::move(addr)) {}
 
         virtual int DoRpcRequest(RpcReqData data) {
-            data.cb_(data.data_);
+            auto rsp = CloneProposalMsg(*data.data_.get());
+            data.cb_(rsp);
             return 0;
         }
 };
@@ -41,22 +42,26 @@ TEST(proposer, doPropose) {
         return std::unique_ptr<DummyRemoteConn>(new DummyRemoteConn(std::move(addr)));
     };
 
-    ConnMng conn_mng(config);
+    auto conn_mng = std::make_shared<ConnMng>(config);
 
-    conn_mng.SetConnCreator(conn_creator);
-    ASSERT_EQ(3, conn_mng.CreateConn());
+    conn_mng->SetConnCreator(conn_creator);
+    ASSERT_EQ(3, conn_mng->CreateConn());
 
-    auto& local = conn_mng.GetLocalConn();
+    auto& local = conn_mng->GetLocalConn();
     ASSERT_EQ(ConnType_LOCAL, local->GetType());
     ASSERT_STREQ("xxxx:yyy", local->GetAddr().addr_.c_str());
 
-    auto& r1 = conn_mng.GetRemoteConn()[0];
-    auto& r2 = conn_mng.GetRemoteConn()[1];
+    auto& r1 = conn_mng->GetRemoteConn()[0];
+    auto& r2 = conn_mng->GetRemoteConn()[1];
 
     ASSERT_EQ(ConnType_Remote, r1->GetType());
     ASSERT_STREQ("aaaa:bb", r1->GetAddr().addr_.c_str());
     ASSERT_EQ(ConnType_Remote, r2->GetType());
     ASSERT_STREQ("aaaa2:bb2", r2->GetAddr().addr_.c_str());
+
+    //PlogMng pmn;
+    //Proposer pp(config);
+    //pp.SetConnMng(conn_mng);
 
     // TODO
 }

@@ -61,7 +61,6 @@ namespace quarrel {
         uint32_t size_;
         uint32_t type_;
         uint32_t version_;
-        uint32_t to_;
         uint32_t from_;
         uint64_t reqid_; // rpc id
         uint8_t  data_[1]; // struct hack
@@ -84,6 +83,7 @@ namespace quarrel {
     constexpr auto PaxosMsgHeaderSz = offsetof(PaxosMsg, data_);
     constexpr auto ProposalHeaderSz = offsetof(Proposal, data_);
 
+    std::shared_ptr<PaxosMsg> CloneProposalMsg(const PaxosMsg& pm);
     std::shared_ptr<PaxosMsg> AllocProposalMsg(uint32_t value_size);
 }
 
