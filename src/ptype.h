@@ -49,6 +49,7 @@ namespace quarrel {
         uint64_t plid_; // plog id
         uint64_t pentry_; // plog entry
         uint16_t proposer_;
+        uint16_t batch_num_; // for batch preparation, that is, one prepare request for entry slot range from pentry_ to pentry_ + batch_num_;
 
         uint32_t size_; // sizeof value
         uint32_t status_;

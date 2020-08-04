@@ -35,11 +35,15 @@ class Proposer {
         // this is no harm at the cost of some performance overhead, which can be avoided by putting requests in a queue.
         int Propose(uint64_t opaque, const std::string& val, uint64_t paxos_inst = 0);
 
+        // TODO, one prepare for mulitple consecutive entry slots
+        int ProposeBatch(uint64_t opaque, const std::vector<std::string>& vals, uint64_t pinst);
+
     private:
         int doAccept(std::shared_ptr<PaxosMsg>& p);
         int doPrepare(std::shared_ptr<PaxosMsg>& p);
         int doChosen(std::shared_ptr<PaxosMsg>& p);
         bool canSkipPrepare(uint64_t pinst, uint64_t entry);
+        std::shared_ptr<PaxosMsg> allocPaxosMsg(uint64_t pinst, uint64_t opaque, uint32_t value_size);
         std::shared_ptr<BatchRpcContext> doBatchRpcRequest(int majority, std::shared_ptr<PaxosMsg>& pm);
 
     private:

@@ -8,36 +8,66 @@ namespace quarrel {
     Proposer::Proposer(std::shared_ptr<Configure> config)
         :config_(std::move(config)) {}
 
+    std::shared_ptr<PaxosMsg> Proposer::allocPaxosMsg(uint64_t pinst, uint64_t opaque, uint32_t value_size) {
+      auto pm = AllocProposalMsg(value_size);
+      if (!pm) return NULL;
+
+      auto entry = pmn_->GetMaxCommittedEntry(pinst) + 1;
+      auto pid = pmn_->GenPrepareId(pinst, entry);
+
+      // TODO, check local entry status to handle pending proposal, this improve
+      // performance a little bit
+
+      pm->from_ = config_->local_id_;
+      pm->type_ = kMsgType_PREPARE_REQ;
+      pm->version_ = config_->msg_version_;
+
+      auto pp = reinterpret_cast<Proposal*>(pm->data_);
+      // pp->term_ = xxxxx;
+      pp->pid_ = pid;
+      pp->plid_ = pinst;
+      pp->batch_num_ = 1;
+      pp->pentry_ = entry;
+      pp->opaque_ = opaque;
+      pp->proposer_ = config_->local_id_;
+      pp->status_ = kPaxosState_PREPARED;
+      pp->value_id_ = pmn_->GenValueId(pinst, entry, pid);
+
+      return pm;
+    }
+
     int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
-        auto pm = AllocProposalMsg(val.size());
+        auto pm = allocPaxosMsg(pinst, opaque, val.size());
         if (!pm) return kErrCode_OOM;
 
-        auto entry = pmn_->GetMaxCommittedEntry(pinst) + 1;
-        auto pid = pmn_->GenPrepareId(pinst, entry);
-
-        pm->from_ = config_->local_id_;
-        pm->type_ = kMsgType_PREPARE_REQ;
-        pm->version_ = config_->msg_version_;
-
-        auto pp = reinterpret_cast<Proposal*>(pm->data_);
-        //pp->term_ = xxxxx;
-        pp->pid_ = pid;
-        pp->plid_ = pinst;
-        pp->pentry_ = entry;
-        pp->opaque_ = opaque;
-        pp->proposer_ = config_->local_id_;
-        pp->status_ = kPaxosState_PREPARED;
-        pp->value_id_ = pmn_->GenValueId(pinst, pid);
-
-        memcpy(pp->data_, val.data(), val.size());
-
         int ret = 0;
-        if (!canSkipPrepare(pinst, entry)) {
+        auto pp = reinterpret_cast<Proposal*>(pm->data_);
+
+        // don't send value for prepare,not necessary.
+        // memcpy(pp->data_, val.data(), val.size());
+
+        pp->size_ -= val.size();
+        pm->size_ -= val.size();
+
+        if (val.empty() || !canSkipPrepare(pinst, pp->pentry_)) {
+            // empty val indicates a read probe which must always perform
             ret = doPrepare(pm);
         }
 
         if (ret != kErrCode_OK && ret != kErrCode_PREPARE_PEER_VALUE) {
-            LOG_ERR << "do prepare failed, pinst:" << pinst << ", entry:" << entry << ", opaque:" << opaque;
+            LOG_ERR << "do prepare failed(" << ret << "), pinst:" << pinst << ", entry:" << pp->pentry_ << ", opaque:" << opaque;
+            return ret;
+        }
+
+        // set value
+        if (ret != kErrCode_PREPARE_PEER_VALUE) {
+            pp->size_ += val.size();
+            pm->size_ += val.size();
+            memcpy(pp->data_, val.data(), val.size());
+        }
+
+        if (pp->size_ == 0) {
+            // read probe
             return ret;
         }
 
