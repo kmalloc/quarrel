@@ -15,7 +15,7 @@ namespace quarrel {
       auto entry = pmn_->GetMaxCommittedEntry(pinst) + 1;
       auto pid = pmn_->GenPrepareId(pinst, entry);
 
-      // TODO, check local entry status to handle pending proposal, this improve
+      // TODO, check local entry status to handle pending proposal, this might improve
       // performance a little bit
 
       pm->from_ = config_->local_id_;

@@ -25,7 +25,7 @@ namespace quarrel {
     enum ConnType {
         ConnType_INVALID = 0,
         ConnType_LOCAL = 1,
-        ConnType_Remote = 2,
+        ConnType_REMOTE = 2,
     };
 
     // conn is a connection abstraction to an acceptor.
@@ -60,7 +60,7 @@ namespace quarrel {
     class RemoteConn: public Conn {
         public:
             RemoteConn(int concur_num, AddrInfo addr)
-            : Conn(ConnType_Remote, std::move(addr)), reqid_(0xff,1), req_(concur_num) {
+            : Conn(ConnType_REMOTE, std::move(addr)), reqid_(0xff,1), req_(concur_num) {
             }
 
             virtual ~RemoteConn() {}
