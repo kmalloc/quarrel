@@ -63,27 +63,27 @@ namespace quarrel {
             }
 
             uint64_t LoadUncommitedEntry(uint64_t pinst) {
-                if (pinst >= entries_.size()) return kErrCode_PLOG_NOT_EXIST;
+                pinst = pinst % entries_.size();
                 return entries_[pinst]->LoadUncommittedEntry();
             }
 
             uint64_t GetMaxCommittedEntry(uint64_t pinst) {
-                if (pinst >= entries_.size()) return kErrCode_PLOG_NOT_EXIST;
+                pinst = pinst % entries_.size();
                 return entries_[pinst]->GetMaxCommittedEntry();
             }
 
             uint64_t GenValueId(uint64_t pinst, uint64_t pid) {
-                if (pinst >= entries_.size()) return kErrCode_PLOG_NOT_EXIST;
+                pinst = pinst % entries_.size();
                 return entries_[pinst]->GenValueId();
             }
 
             uint64_t GenPrepareId(uint64_t pinst, uint64_t entry) {
-                if (pinst >= entries_.size()) return kErrCode_PLOG_NOT_EXIST;
+                pinst = pinst % entries_.size();
                 return entries_[pinst]->GenPrepareId();
             }
 
             uint64_t SetPrepareIdGreaterThan(uint64_t pinst, uint64_t entry, uint64_t v) {
-                if (pinst >= entries_.size()) return kErrCode_PLOG_NOT_EXIST;
+                pinst = pinst % entries_.size();
                 return entries_[pinst]->SetPrepareIdGreaterThan(entry, v);
             }
 

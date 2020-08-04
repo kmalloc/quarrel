@@ -36,7 +36,7 @@ namespace quarrel {
             ret = doPrepare(pm);
         }
 
-        if (ret) {
+        if (ret != kErrCode_OK && ret != kErrCode_PREPARE_PEER_VALUE) {
             LOG_ERR << "do prepare failed, pinst:" << pinst << ", entry:" << entry << ", opaque:" << opaque;
             return ret;
         }
@@ -44,12 +44,14 @@ namespace quarrel {
         pm->type_ = kMsgType_ACCEPT_REQ;
         pp->status_ = kPaxosState_PROMISED;
 
-        ret = doAccept(pm);
+        auto ret2 = doAccept(pm);
 
-        if (ret == kErrCode_OK) {
+        if (ret2 == kErrCode_OK) {
             pm->type_ = kMsgType_CHOSEN_REQ;
             pp->status_ = kPaxosState_CHOSEN;
             doChosen(pm);
+        } else {
+            ret = ret2;
         }
 
         return ret;
@@ -137,6 +139,7 @@ namespace quarrel {
         if (valid_rsp >= majority) {
             if (last_voted) {
                 pm = std::move(last_voted);
+                return kErrCode_PREPARE_PEER_VALUE;
             }
             return kErrCode_OK;
         }
