@@ -118,7 +118,7 @@ namespace quarrel {
 
             if (rsp_proposal->pid_ > origin_proposal->pid_) {
                 // rejected
-                pmn_->SetPrepaeIdGreaterThan(origin_proposal->plid_, origin_proposal->pentry_, rsp_proposal->pid_);
+                pmn_->SetPrepareIdGreaterThan(origin_proposal->plid_, origin_proposal->pentry_, rsp_proposal->pid_);
                 continue;
             }
 
@@ -160,7 +160,7 @@ namespace quarrel {
 
             if (rsp_proposal->pid_ > origin_proposal->pid_) {
                 // rejected
-                pmn_->SetPrepaeIdGreaterThan(origin_proposal->plid_, origin_proposal->pentry_, rsp_proposal->pid_);
+                pmn_->SetPrepareIdGreaterThan(origin_proposal->plid_, origin_proposal->pentry_, rsp_proposal->pid_);
                 continue;
             }
 

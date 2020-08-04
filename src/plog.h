@@ -22,7 +22,7 @@ namespace quarrel {
 
     class EntryMng {
         public:
-            explicit EntryMng(uint64_t pinst);
+            EntryMng(uint64_t pinst, std::string db);
             virtual ~EntryMng();
 
             virtual int GetMaxCommitedId() = 0;
@@ -30,37 +30,68 @@ namespace quarrel {
             virtual int LoadEntry(uint64_t entry) = 0;
             virtual int Checkpoint(uint64_t term) = 0;
 
+            virtual int LoadUncommittedEntry() = 0;
+
             uint64_t GenValueId();
             uint64_t GenPrepareId();
+            int GetMaxCommittedEntry();
             int SetEntry(const Proposal& p);
             Entry* GetEntry(uint64_t entry);
             Entry* CreateEntry(uint64_t entry);
             int LoadPlog(int entry, Proposal& p);
+            int SetPrepareIdGreaterThan(uint64_t entry, uint64_t val);
 
         private:
+            std::string db_;
             uint64_t pinst_;
             uint64_t local_chosen_entry_;
             uint64_t global_chosen_entry_;
+            uint64_t max_committed_entry_;
 
             LruMap<uint64_t, Entry> entries_;
     };
 
-
-    using EntryMngCreator = std::function<std::unique_ptr<EntryMng>(int)>;
+    using EntryMngCreator = std::function<std::unique_ptr<EntryMng>(int, std::string)>;
 
     class PlogMng {
         public:
-            PlogMng(std::shared_ptr<Configure> config);
+            PlogMng(std::shared_ptr<Configure> config): config_(std::move(config)) {}
 
-            uint64_t LoadUncommitedEntry(uint64_t pinst);
-            uint64_t GetMaxCommittedEntry(uint64_t pinst);
-            uint64_t GenValueId(uint64_t pinst, uint64_t pid);
-            uint64_t GenPrepareId(uint64_t pinst, uint64_t entry);
-            uint64_t SetPrepaeIdGreaterThan(uint64_t pinst, uint64_t entry, uint64_t v);
+            int InitPlog();
+
+            uint64_t LoadUncommitedEntry(uint64_t pinst) {
+                if (pinst >= entries_.size()) return kErrCode_PLOG_NOT_EXIST;
+                return entries_[pinst]->LoadUncommittedEntry();
+            }
+
+            uint64_t GetMaxCommittedEntry(uint64_t pinst) {
+                if (pinst >= entries_.size()) return kErrCode_PLOG_NOT_EXIST;
+                return entries_[pinst]->GetMaxCommittedEntry();
+            }
+
+            uint64_t GenValueId(uint64_t pinst, uint64_t pid) {
+                if (pinst >= entries_.size()) return kErrCode_PLOG_NOT_EXIST;
+                return entries_[pinst]->GenValueId();
+            }
+
+            uint64_t GenPrepareId(uint64_t pinst, uint64_t entry) {
+                if (pinst >= entries_.size()) return kErrCode_PLOG_NOT_EXIST;
+                return entries_[pinst]->GenPrepareId();
+            }
+
+            uint64_t SetPrepareIdGreaterThan(uint64_t pinst, uint64_t entry, uint64_t v) {
+                if (pinst >= entries_.size()) return kErrCode_PLOG_NOT_EXIST;
+                return entries_[pinst]->SetPrepareIdGreaterThan(entry, v);
+            }
+
+            void SetEntryMngCreator(EntryMngCreator creator) {
+                creator_ = std::move(creator);
+            }
 
         private:
             EntryMngCreator creator_;
-            std::vector<EntryMng> entries_;
+            std::shared_ptr<Configure> config_;
+            std::vector<std::unique_ptr<EntryMng>> entries_;
     };
 }
 
