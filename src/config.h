@@ -17,6 +17,7 @@ namespace quarrel {
 
         uint32_t msg_version_; // msg version
         uint32_t storage_type_; // storage type for plog
+        uint32_t plog_inst_num_; // plog instance number
         std::string local_storage_path_; // storage path
 
         AddrInfo local_;

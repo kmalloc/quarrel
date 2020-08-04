@@ -16,7 +16,12 @@ namespace quarrel {
             uint64_t GetStep() const { return step_; }
             uint64_t GetAndInc() { uint64_t v = id_; id_ += step_; return v; }
 
-            uint64_t SetGreatThan(int v) { id_ += (v - id_ + step_ - 1)/step_ * step_;  return id_; }
+            uint64_t SetGreatThan(int v) {
+                if (v <= id_) return id_;
+
+                id_ += (v - id_ + step_ - 1)/step_ * step_;
+                return id_;
+            }
 
         private:
             uint64_t step_;

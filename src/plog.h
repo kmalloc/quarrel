@@ -57,7 +57,10 @@ namespace quarrel {
         public:
             PlogMng(std::shared_ptr<Configure> config): config_(std::move(config)) {}
 
-            int InitPlog();
+            int InitPlog() {
+                // TODO
+                return 0;
+            }
 
             uint64_t LoadUncommitedEntry(uint64_t pinst) {
                 if (pinst >= entries_.size()) return kErrCode_PLOG_NOT_EXIST;
