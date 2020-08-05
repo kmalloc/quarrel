@@ -8,6 +8,7 @@
 
 #include <thread>
 #include <memory>
+#include <vector>
 
 namespace quarrel {
     class Acceptor {
@@ -36,8 +37,8 @@ namespace quarrel {
             std::shared_ptr<PlogMng> pmn_;
             std::shared_ptr<Configure> config_;
 
-            std::thread thread_;
-            LockFreeQueue<std::unique_ptr<PaxosMsg>> msg_;
+            std::vector<std::thread> thread_;
+            std::vector<LockFreeQueue<std::unique_ptr<PaxosMsg>>> msg_;
     };
 }
 
