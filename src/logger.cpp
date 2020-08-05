@@ -43,19 +43,9 @@ class T {
 
 template <int N>
 inline LogStream& operator<<(LogStream& s, const char (&arr)[N]) {
-    s.write(arr, N-1);
-    return s;
+  s.write(arr, N-1);
+  return s;
 }
-
-/*
-inline LogStream& operator<<(LogStream& s, const char* str) {
-    if (!str) return s;
-
-    auto sz = strlen(str);
-    s.write(str, sz);
-    return s;
-}
-*/
 
 inline LogStream& operator<<(LogStream& s, T v) {
   s.write(v.str_, v.len_);
