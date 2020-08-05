@@ -22,7 +22,7 @@ namespace quarrel {
             std::shared_ptr<Proposal> promised_; // prepare request promised
     };
 
-    // A EntryMng maintains one instance of plog(an array of log entry)
+    // An EntryMng maintains one instance of plog(an array of log entry)
     // and it is supposed to be mutated from one thread only.
     class EntryMng {
         public:

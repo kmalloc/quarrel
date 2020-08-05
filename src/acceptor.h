@@ -15,9 +15,9 @@ namespace quarrel {
             explicit Acceptor(std::shared_ptr<Configure> config);
             ~Acceptor();
 
-            // An acceptor mains several worker threads:
-            // each thread waits on a msg queue designated to a plog instance
-            // thread numbers must <= plog instance number,
+            // An acceptor mains several worker threads,
+            // each thread waits on a msg queue designated to a plog instance,
+            // thread count must <= plog instance count,
             // ensuring that each plog instance is mutated from one thread only.
             int StartWorker();
             int StopWorker();
