@@ -18,9 +18,12 @@ namespace quarrel {
         private:
             IdGen ig_;
             IdGenByDate value_ig_;
-            PaxosStateMachine state_;
+            std::shared_ptr<Proposal> pp_; // proposal accepted
+            std::shared_ptr<Proposal> promised_; // prepare request promised
     };
 
+    // A EntryMng maintains one instance of plog(an array of log entry)
+    // and it is supposed to be mutated from one thread only.
     class EntryMng {
         public:
             EntryMng(uint64_t pinst, std::string db, uint32_t entryCacheSize = 100000)
@@ -35,9 +38,10 @@ namespace quarrel {
             virtual int GetMaxCommittedEntry() = 0;
             virtual int LoadUncommittedEntry() = 0;
 
-            int SetEntry(const Proposal& p);
-            Entry* GetEntry(uint64_t entry);
-            Entry* CreateEntry(uint64_t entry);
+            int SetPromised(const Proposal& p);
+            int SetAccepted(const Proposal& p);
+            Entry& GetEntry(uint64_t entry);
+            Entry& CreateEntry(uint64_t entry);
             int LoadPlog(int entry, Proposal& p);
             uint64_t GenPrepareId(uint64_t entry);
             uint64_t GenValueId(uint64_t entry, uint64_t pid);

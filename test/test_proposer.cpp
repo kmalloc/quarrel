@@ -33,8 +33,8 @@ TEST(proposer, doPropose) {
     config->timeout_ = 3; // 3ms
     config->local_ = {ConnType_LOCAL, "xxxx:yyy"};
     config->total_acceptor_ = 3;
-    config->peer_.push_back({ConnType_Remote, "aaaa:bb"});
-    config->peer_.push_back({ConnType_Remote, "aaaa2:bb2"});
+    config->peer_.push_back({ConnType_REMOTE, "aaaa:bb"});
+    config->peer_.push_back({ConnType_REMOTE, "aaaa2:bb2"});
 
     auto conn_creator = [](AddrInfo addr) -> std::unique_ptr<Conn> {
         if (addr.type_ == ConnType_LOCAL) return std::unique_ptr<DummyLocalConn>(new DummyLocalConn(std::move(addr)));
@@ -54,9 +54,9 @@ TEST(proposer, doPropose) {
     auto& r1 = conn_mng->GetRemoteConn()[0];
     auto& r2 = conn_mng->GetRemoteConn()[1];
 
-    ASSERT_EQ(ConnType_Remote, r1->GetType());
+    ASSERT_EQ(ConnType_REMOTE, r1->GetType());
     ASSERT_STREQ("aaaa:bb", r1->GetAddr().addr_.c_str());
-    ASSERT_EQ(ConnType_Remote, r2->GetType());
+    ASSERT_EQ(ConnType_REMOTE, r2->GetType());
     ASSERT_STREQ("aaaa2:bb2", r2->GetAddr().addr_.c_str());
 
     //PlogMng pmn;

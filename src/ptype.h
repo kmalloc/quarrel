@@ -69,23 +69,10 @@ namespace quarrel {
         uint8_t  data_[1]; // struct hack
     } __attribute__((packed, aligned(1)));
 
-    struct PaxosStateMachine {
-        uint32_t state_;
-        uint64_t prepare_id_;
-        uint64_t accepted_id_;
-
-        uint32_t accepted_id_from_peer_;
-        std::unique_ptr<Proposal> proposal_;
-
-        uint32_t num_promise_; // number of acceptor who sent promise
-        uint32_t num_accepted_; // number of acceptor who accepted.
-        uint64_t acceptor_promised_[MAX_ACCEPTOR_NUM]; // acceptors who gave promise
-        uint64_t acceptor_accepted_[MAX_ACCEPTOR_NUM]; // acceptors who accepted
-    };
-
     constexpr auto PaxosMsgHeaderSz = offsetof(PaxosMsg, data_);
     constexpr auto ProposalHeaderSz = offsetof(Proposal, data_);
 
+    std::shared_ptr<Proposal> AllocProposal(uint32_t value_size);
     std::shared_ptr<PaxosMsg> CloneProposalMsg(const PaxosMsg& pm);
     std::shared_ptr<PaxosMsg> AllocProposalMsg(uint32_t value_size);
 }

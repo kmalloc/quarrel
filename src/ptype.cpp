@@ -3,6 +3,16 @@
 #include <string.h>
 
 namespace quarrel {
+    std::shared_ptr<Proposal> AllocProposal(uint32_t value_size) {
+        auto total_sz = ProposalHeaderSz + value_size;
+        auto rp = reinterpret_cast<Proposal*>(malloc(total_sz));
+        if (rp == NULL) return NULL;
+
+        rp->size_  = value_size;
+        std::shared_ptr<Proposal> p(rp, free);
+        return p;
+    }
+
     std::shared_ptr<PaxosMsg> AllocProposalMsg(uint32_t value_size) {
         // value_size == 0 is permitted
         auto total_sz = PaxosMsgHeaderSz + ProposalHeaderSz + value_size;
