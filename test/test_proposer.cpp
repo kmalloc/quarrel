@@ -59,9 +59,9 @@ TEST(proposer, doPropose) {
     ASSERT_EQ(ConnType_REMOTE, r2->GetType());
     ASSERT_STREQ("aaaa2:bb2", r2->GetAddr().addr_.c_str());
 
-    //PlogMng pmn;
-    //Proposer pp(config);
-    //pp.SetConnMng(conn_mng);
+    PlogMng pmn(config);
+    Proposer pp(config);
+    pp.SetConnMng(conn_mng);
 
     // TODO
 }
