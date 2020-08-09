@@ -48,9 +48,9 @@ TEST(quarrel_plog, test_entry_serialization) {
     ASSERT_EQ(ent.GenValueId(), ent2.GenValueId());
     ASSERT_EQ(ent.GenPrepareId(), ent2.GenPrepareId());
 
-    auto pp1 = ent2.GetProposal();
-    auto pp2 = ent2.GetPromised();
+    const auto& pp1 = ent2.GetProposal();
+    const auto& pp2 = ent2.GetPromised();
 
-    ASSERT_EQ(0, memcmp(p1.get(), pp1, ProposalHeaderSz+p1->size_));
-    ASSERT_EQ(0, memcmp(p2.get(), pp2, ProposalHeaderSz+p2->size_));
+    ASSERT_EQ(0, memcmp(p1.get(), pp1.get(), ProposalHeaderSz+p1->size_));
+    ASSERT_EQ(0, memcmp(p2.get(), pp2.get(), ProposalHeaderSz+p2->size_));
 }

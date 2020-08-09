@@ -30,8 +30,8 @@ namespace quarrel {
             void SetPromise(std::shared_ptr<Proposal> p) { promised_ = std::move(p); }
             uint64_t SetPrepareIdGreaterThan(uint64_t val) { return ig_.SetGreatThan(val); }
 
-            const Proposal* GetProposal() const { return pp_.get(); }
-            const Proposal* GetPromised() const { return promised_.get(); }
+            const std::shared_ptr<Proposal>& GetProposal() const { return pp_; }
+            const std::shared_ptr<Proposal>& GetPromised() const { return promised_; }
 
             int SerializeTo(std::string& output) {
                 Proposal dummy;
