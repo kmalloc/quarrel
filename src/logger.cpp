@@ -150,4 +150,12 @@ void Logger::setFlush(FlushFunc flush) {
   g_flush = flush;
 }
 
+void Logger::resetOutput() {
+    g_output = defaultOutput;
+}
+
+void Logger::resetFlush() {
+    g_flush = defaultFlush;
+}
+
 }

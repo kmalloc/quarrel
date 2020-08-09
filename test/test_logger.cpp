@@ -23,4 +23,7 @@ TEST(logger, testlog) {
     ASSERT_EQ(0, op);
     ASSERT_TRUE(log.find("world") != std::string::npos);
     ASSERT_TRUE(log.find("INFO") != std::string::npos);
+
+    Logger::resetFlush();
+    Logger::resetOutput();
 }

@@ -2,6 +2,10 @@
 
 #include <string>
 #include <thread>
+#include <chrono>
+#include <future>
+
+#include "logger.h"
 
 #include "proposer.h"
 
@@ -24,7 +28,19 @@ struct DummyRemoteConn: public RemoteConn {
         virtual ~DummyRemoteConn() {}
 
         virtual int DoWrite(std::shared_ptr<PaxosMsg> req) {
-            return 0;
+          LOG_INFO << "DoWrite:" << req->reqid_;
+
+          auto fake_rsp = [self = this](std::shared_ptr<PaxosMsg> msg) mutable {
+            auto tm = std::chrono::milliseconds(1);
+            std::this_thread::sleep_for(tm);
+            self->HandleRecv(msg);
+            LOG_INFO << "dummy call to HandleRecv()";
+          };
+
+          std::async(std::launch::async, fake_rsp, std::move(req));
+
+          LOG_INFO << "dummy call to DoWrite()";
+          return kErrCode_OK;
         }
 };
 
@@ -55,7 +71,7 @@ struct DummyEntryMng: public EntryMng {
 
 TEST(proposer, doPropose) {
     auto config = std::make_shared<Configure>();
-    config->timeout_ = 3; // 3ms
+    config->timeout_ = 8; // 8ms
     config->local_ = {ConnType_LOCAL, "xxxx:yyy"};
     config->total_acceptor_ = 3;
     config->plog_inst_num_ = 5;
@@ -98,7 +114,7 @@ TEST(proposer, doPropose) {
     pp.SetPlogMng(pmn);
     pp.SetConnMng(conn_mng);
 
-    pp.Propose(0xbadf00d, "dummy value");
+    ASSERT_EQ(kErrCode_OK,pp.Propose(0xbadf00d, "dummy value"));
 
     // TODO
 }

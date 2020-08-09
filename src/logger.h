@@ -62,6 +62,8 @@ class Logger {
 
   static void setFlush(FlushFunc);
   static void setOutput(OutputFunc);
+  static void resetFlush();
+  static void resetOutput();
 
  private:
   class Impl {
