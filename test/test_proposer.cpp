@@ -28,8 +28,6 @@ struct DummyRemoteConn: public RemoteConn {
         virtual ~DummyRemoteConn() {}
 
         virtual int DoWrite(std::shared_ptr<PaxosMsg> req) {
-          LOG_INFO << "DoWrite:" << req->reqid_;
-
           auto fake_rsp = [self = this](std::shared_ptr<PaxosMsg> msg) mutable {
             auto tm = std::chrono::milliseconds(1);
             std::this_thread::sleep_for(tm);
