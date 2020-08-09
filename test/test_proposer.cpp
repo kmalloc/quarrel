@@ -17,7 +17,7 @@ struct DummyLocalConn: public LocalConn {
 
         virtual int DoRpcRequest(RpcReqData data) {
             auto rsp = CloneProposalMsg(*data.data_.get());
-            data.cb_(rsp);
+            data.cb_(std::move(rsp));
             return 0;
         }
 };

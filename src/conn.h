@@ -85,8 +85,9 @@ namespace quarrel {
                     return onReq_(std::move(req), noop);
                 }
 
-                req_.Del(req->reqid_);
+                auto id = req->reqid_;
                 rd->cb_(std::move(req));
+                req_.Del(id);
                 return 0;
             }
 

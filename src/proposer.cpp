@@ -113,7 +113,7 @@ namespace quarrel {
         auto& local = conn_->GetLocalConn();
         auto& remote = conn_->GetRemoteConn();
 
-        RpcReqData req{config_->timeout_, cb, pm};
+        RpcReqData req{config_->timeout_, std::move(cb), pm};
 
         auto ret = 0;
         if ((ret=local->DoRpcRequest(req))) {
