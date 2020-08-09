@@ -72,6 +72,7 @@ namespace quarrel {
     constexpr auto PaxosMsgHeaderSz = offsetof(PaxosMsg, data_);
     constexpr auto ProposalHeaderSz = offsetof(Proposal, data_);
 
+    std::shared_ptr<Proposal> CloneProposal(const Proposal& pm);
     std::shared_ptr<Proposal> AllocProposal(uint32_t value_size);
     std::shared_ptr<PaxosMsg> CloneProposalMsg(const PaxosMsg& pm);
     std::shared_ptr<PaxosMsg> AllocProposalMsg(uint32_t value_size);

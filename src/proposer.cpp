@@ -158,7 +158,7 @@ namespace quarrel {
                 // peer responses with last vote
                 auto lastp = reinterpret_cast<Proposal*>(last_voted->data_);
                 if (last_voted.get() == NULL || lastp->pid_ < rsp_proposal->pid_) {
-                    // last vote with the largest prepare id.
+                    // last vote with the largest prepare id, no majority is required(TODO: maybe we should)
                     last_voted = std::move(m);
                 }
             }

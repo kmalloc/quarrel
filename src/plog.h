@@ -13,11 +13,20 @@ namespace quarrel {
     class Entry {
         public:
             Entry(const Configure& config, uint64_t pinst, uint64_t entry)
-                :ig_(config.local_id_, config.total_acceptor_), value_ig_(0xff, 1) {}
+                :ig_(config.local_id_, config.total_acceptor_), vig_(0xff, 1) {}
+
+            uint64_t GenValueId() { return vig_.GetAndInc(); }
+            uint64_t GenPrepareId() { return ig_.GetAndInc(); }
+            void SetProposal(std::shared_ptr<Proposal> p) { pp_ = std::move(p); }
+            void SetPromise(std::shared_ptr<Proposal> p) { promised_ = std::move(p); }
+            uint64_t SetPrepareIdGreaterThan(uint64_t val) { return ig_.SetGreatThan(val); }
+
+            int SerializeTo(std::string& output);
+            int UnserializeFrom(const std::string& from);
 
         private:
             IdGen ig_;
-            IdGenByDate value_ig_;
+            IdGenByDate vig_; // value IdGen
             std::shared_ptr<Proposal> pp_; // proposal accepted
             std::shared_ptr<Proposal> promised_; // prepare request promised
     };
@@ -26,8 +35,8 @@ namespace quarrel {
     // and it is supposed to be mutated from one thread only.
     class EntryMng {
         public:
-            EntryMng(uint64_t pinst, std::string db, uint32_t entryCacheSize = 100000)
-                :db_(std::move(db)), pinst_(pinst), entries_(entryCacheSize) {}
+            EntryMng(std::shared_ptr<Configure> config, uint64_t pinst, std::string db, uint32_t entryCacheSize = 100000)
+                :db_(std::move(db)), config_(std::move(config)), pinst_(pinst), entries_(entryCacheSize) {}
 
             virtual ~EntryMng() {}
 
@@ -38,23 +47,73 @@ namespace quarrel {
             virtual int GetMaxCommittedEntry() = 0;
             virtual int LoadUncommittedEntry() = 0;
 
-            int SetPromised(const Proposal& p);
-            int SetAccepted(const Proposal& p);
-            Entry& GetEntry(uint64_t entry);
-            Entry& CreateEntry(uint64_t entry);
-            int LoadPlog(int entry, Proposal& p);
-            uint64_t GenPrepareId(uint64_t entry);
-            uint64_t GenValueId(uint64_t entry, uint64_t pid);
-            int SetPrepareIdGreaterThan(uint64_t entry, uint64_t val);
+            int SetPromised(const Proposal& p) {
+                auto entry = p.pentry_;
+                auto pc = CloneProposal(p);
+                Entry& ent = GetEntry(entry);
+                ent.SetPromise(std::move(pc));
+                return SaveEntry(entry);
+            }
+
+            int SetAccepted(const Proposal& p) {
+                auto entry = p.pentry_;
+                auto pc = CloneProposal(p);
+                Entry& ent = GetEntry(entry);
+                ent.SetProposal(std::move(pc));
+                return SaveEntry(entry);
+            }
+
+            // create entry if it does not exist
+            Entry& GetEntry(uint64_t entry) {
+                auto ptr = entries_.GetPtr(entry);
+                if (ptr == NULL) {
+                    return CreateEntry(entry);
+                }
+
+                return **ptr;
+            }
+
+            Entry& CreateEntry(uint64_t entry) {
+                auto ptr = entries_.GetPtr(entry);
+                if (ptr) return **ptr;
+
+                auto ent = std::unique_ptr<Entry>(new Entry(*config_, pinst_, entry));
+
+                Entry& val = *ent;
+                entries_.Put(entry, std::move(ent));
+
+                if (LoadEntry(entry) != kErrCode_OK) {
+                }
+
+                return val;
+            }
+
+            uint64_t GenPrepareId(uint64_t entry) {
+                Entry& ent = GetEntry(entry);
+                return ent.GenPrepareId();
+            }
+
+            uint64_t GenValueId(uint64_t entry, uint64_t pid) {
+                Entry& ent = GetEntry(entry);
+                return ent.GenValueId();
+            }
+
+            // return new value
+            uint64_t SetPrepareIdGreaterThan(uint64_t entry, uint64_t val) {
+                Entry& ent = GetEntry(entry);
+                return ent.SetPrepareIdGreaterThan(val);
+            }
 
         private:
             std::string db_;
+            std::shared_ptr<Configure> config_;
+
             uint64_t pinst_;
             uint64_t local_chosen_entry_;
             uint64_t global_chosen_entry_;
             uint64_t max_committed_entry_;
 
-            LruMap<uint64_t, Entry> entries_;
+            LruMap<uint64_t, std::unique_ptr<Entry>> entries_;
     };
 
     using EntryMngCreator = std::function<std::unique_ptr<EntryMng>(int pinst, const Configure& config)>;

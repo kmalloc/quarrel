@@ -30,6 +30,13 @@ namespace quarrel {
         return p;
     }
 
+    std::shared_ptr<Proposal> CloneProposal(const Proposal& pm) {
+        auto vsz = pm.size_;
+        auto pp = AllocProposal(vsz);
+        memcpy(pp.get(), &pm, ProposalHeaderSz + vsz);
+        return pp;
+    }
+
     std::shared_ptr<PaxosMsg> CloneProposalMsg(const PaxosMsg& pm) {
         auto pp = reinterpret_cast<const Proposal*>(pm.data_);
         auto value_size = pp->size_;
