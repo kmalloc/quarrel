@@ -93,24 +93,24 @@ namespace quarrel {
     // and it is supposed to be mutated from one thread only.
     class EntryMng {
         public:
-            EntryMng(std::shared_ptr<Configure> config, uint64_t pinst, std::string db, uint32_t entryCacheSize = 100000)
-                :db_(std::move(db)), config_(std::move(config)), pinst_(pinst), entries_(entryCacheSize) {}
+            EntryMng(std::shared_ptr<Configure> config, uint64_t pinst, uint32_t entryCacheSize = 100000)
+                :db_(config->local_storage_path_), config_(std::move(config)), pinst_(pinst), entries_(entryCacheSize) {}
 
             virtual ~EntryMng() {}
 
-            virtual int SaveEntry(uint64_t entry) = 0;
-            virtual int LoadEntry(uint64_t entry) = 0;
-            virtual int Checkpoint(uint64_t term) = 0;
+            virtual int Checkpoint(uint64_t pinst, uint64_t term) = 0;
+            virtual int LoadEntry(uint64_t pinst, uint64_t entry, Entry&) = 0;
+            virtual int SaveEntry(uint64_t pinst, uint64_t entry, const Entry&) = 0;
 
-            virtual int GetMaxCommittedEntry() = 0;
-            virtual int LoadUncommittedEntry() = 0;
+            virtual uint64_t GetMaxCommittedEntry(uint64_t pinst) = 0;
+            virtual int LoadUncommittedEntry(std::vector<std::unique_ptr<Entry>>& entries) = 0;
 
             int SetPromised(const Proposal& p) {
                 auto entry = p.pentry_;
                 auto pc = CloneProposal(p);
                 Entry& ent = GetEntry(entry);
                 ent.SetPromise(std::move(pc));
-                return SaveEntry(entry);
+                return SaveEntry(pinst_, entry, ent);
             }
 
             int SetAccepted(const Proposal& p) {
@@ -118,7 +118,7 @@ namespace quarrel {
                 auto pc = CloneProposal(p);
                 Entry& ent = GetEntry(entry);
                 ent.SetProposal(std::move(pc));
-                return SaveEntry(entry);
+                return SaveEntry(pinst_, entry, ent);
             }
 
             // create entry if it does not exist
@@ -140,7 +140,7 @@ namespace quarrel {
                 Entry& val = *ent;
                 entries_.Put(entry, std::move(ent));
 
-                if (LoadEntry(entry) != kErrCode_OK) {
+                if (LoadEntry(pinst_, entry, val) != kErrCode_OK) {
                 }
 
                 return val;
@@ -174,7 +174,7 @@ namespace quarrel {
             LruMap<uint64_t, std::unique_ptr<Entry>> entries_;
     };
 
-    using EntryMngCreator = std::function<std::unique_ptr<EntryMng>(int pinst, const Configure& config)>;
+    using EntryMngCreator = std::function<std::unique_ptr<EntryMng>(int pinst, std::shared_ptr<Configure> config)>;
 
     class PlogMng {
         public:
@@ -185,20 +185,15 @@ namespace quarrel {
                 entries_.reserve(config_->plog_inst_num_);
 
                 for (auto i = 0; i < config_->plog_inst_num_; ++i) {
-                    entries_.push_back(creator_(i, *config_));
+                    entries_.push_back(creator_(i, config_));
                 }
 
                 return 0;
             }
 
-            uint64_t LoadUncommitedEntry(uint64_t pinst) {
-                pinst = pinst % entries_.size();
-                return entries_[pinst]->LoadUncommittedEntry();
-            }
-
             uint64_t GetMaxCommittedEntry(uint64_t pinst) {
                 pinst = pinst % entries_.size();
-                return entries_[pinst]->GetMaxCommittedEntry();
+                return entries_[pinst]->GetMaxCommittedEntry(pinst);
             }
 
             uint64_t GenValueId(uint64_t pinst, uint64_t entry, uint64_t pid) {

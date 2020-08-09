@@ -28,11 +28,37 @@ struct DummyRemoteConn: public RemoteConn {
         }
 };
 
+struct DummyEntryMng: public EntryMng {
+    DummyEntryMng(std::shared_ptr<Configure> config, uint64_t pinst)
+        :EntryMng(std::move(config), pinst) {}
+
+    virtual int SaveEntry(uint64_t pinst, uint64_t entry, const Entry& ent) {
+        return kErrCode_OK;
+    }
+    virtual int LoadEntry(uint64_t pinst, uint64_t entry, Entry& ent) {
+        return kErrCode_OK;
+    }
+    virtual int Checkpoint(uint64_t pinst, uint64_t term) {
+        return kErrCode_OK;
+    }
+
+    virtual uint64_t GetMaxCommittedEntry(uint64_t pinst) {
+        return max_committed_;
+    }
+
+    virtual int LoadUncommittedEntry(std::vector<std::unique_ptr<Entry>>& entries) {
+        return kErrCode_OK;
+    }
+
+    uint64_t max_committed_{0};
+};
+
 TEST(proposer, doPropose) {
     auto config = std::make_shared<Configure>();
     config->timeout_ = 3; // 3ms
     config->local_ = {ConnType_LOCAL, "xxxx:yyy"};
     config->total_acceptor_ = 3;
+    config->plog_inst_num_ = 5;
     config->peer_.push_back({ConnType_REMOTE, "aaaa:bb"});
     config->peer_.push_back({ConnType_REMOTE, "aaaa2:bb2"});
 
@@ -59,9 +85,20 @@ TEST(proposer, doPropose) {
     ASSERT_EQ(ConnType_REMOTE, r2->GetType());
     ASSERT_STREQ("aaaa2:bb2", r2->GetAddr().addr_.c_str());
 
-    PlogMng pmn(config);
     Proposer pp(config);
+    std::shared_ptr<PlogMng> pmn = std::make_shared<PlogMng>(config);
+
+    auto entry_mng_creator = [](int pinst, std::shared_ptr<Configure> config) -> std::unique_ptr<EntryMng> {
+        return std::unique_ptr<EntryMng>(new DummyEntryMng(std::move(config), pinst));
+    };
+
+    pmn->SetEntryMngCreator(entry_mng_creator);
+    pmn->InitPlog();
+
+    pp.SetPlogMng(pmn);
     pp.SetConnMng(conn_mng);
+
+    pp.Propose(0xbadf00d, "dummy value");
 
     // TODO
 }
