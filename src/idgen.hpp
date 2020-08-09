@@ -14,6 +14,7 @@ namespace quarrel {
 
             void SetStep(uint64_t step) { step_ = step; }
             uint64_t GetStep() const { return step_; }
+            uint64_t Get() const { return id_; }
             uint64_t GetAndInc() { uint64_t v = id_; id_ += step_; return v; }
 
             uint64_t SetGreatThan(int v) {

@@ -38,6 +38,8 @@ namespace quarrel {
         kErrCode_CONN_FAIL = 3004,
         kErrCode_PLOG_NOT_EXIST = 3005,
         kErrCode_PREPARE_PEER_VALUE = 3006, // prepare return peer's value
+        kErrCode_INVALID_PLOG_DATA = 30007, // invalid formated plog data
+        kErrCode_UNMARSHAL_PLOG_FAIL = 30008, // unmarshal plog fail
     };
 
     constexpr int MAX_ACCEPTOR_NUM = 32;

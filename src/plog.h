@@ -8,8 +8,17 @@
 #include "lrumap.hpp"
 
 #include <vector>
+#include <string.h>
 
 namespace quarrel {
+    struct EntryRaw {
+        uint32_t size_;
+        uint32_t version_;
+        uint64_t value_id_;
+        uint64_t prepare_id_;
+        char data[1]; // proposal + promised
+    } __attribute__((packed, aligned(1)));
+
     class Entry {
         public:
             Entry(const Configure& config, uint64_t pinst, uint64_t entry)
@@ -21,8 +30,54 @@ namespace quarrel {
             void SetPromise(std::shared_ptr<Proposal> p) { promised_ = std::move(p); }
             uint64_t SetPrepareIdGreaterThan(uint64_t val) { return ig_.SetGreatThan(val); }
 
-            int SerializeTo(std::string& output);
-            int UnserializeFrom(const std::string& from);
+            int SerializeTo(std::string& output) {
+                Proposal dummy;
+                memset(&dummy, 0xff, sizeof(dummy));
+
+                auto proposal_sz = ProposalHeaderSz + (pp_?pp_->size_:1);
+                auto promised_sz = ProposalHeaderSz + (promised_?pp_->size_:1);
+                auto total_sz = sizeof(EntryRaw) - 1 + proposal_sz + promised_sz;
+
+                output.clear();
+                output.resize(total_sz);
+
+                EntryRaw* raw = reinterpret_cast<EntryRaw*>(&output[0]);
+                raw->size_ = total_sz;
+                raw->version_ = 0x11;
+                raw->value_id_ = vig_.Get();
+                raw->prepare_id_ = ig_.Get();
+
+                Proposal* p1 = pp_.get();
+                if (p1 == NULL) p1 = &dummy;
+
+                Proposal* p2 = promised_.get();
+                if (p2 == NULL) p2 = &dummy;
+
+                memcpy(raw->data, p1, proposal_sz);
+                memcpy(raw->data+proposal_sz, p2, promised_sz);
+                return total_sz;
+            }
+
+            int UnserializeFrom(const std::string& from) {
+                if (from.size() < sizeof(EntryRaw)) return kErrCode_UNMARSHAL_PLOG_FAIL;
+
+                const EntryRaw* raw = reinterpret_cast<const EntryRaw*>(&from[0]);
+                if (raw->size_ != from.size()) return kErrCode_INVALID_PLOG_DATA;
+
+                vig_.SetGreatThan(raw->value_id_);
+                ig_.SetGreatThan(raw->prepare_id_);
+
+                const Proposal* p1 = reinterpret_cast<const Proposal*>(raw->data[0]);
+                const Proposal* p2 = reinterpret_cast<const Proposal*>(raw->data[0]+ProposalHeaderSz+p1->size_);
+
+                if (p1->size_+p2->size_+2*ProposalHeaderSz != from.size() - sizeof(EntryRaw) + 1) {
+                    return kErrCode_INVALID_PLOG_DATA;
+                }
+
+                pp_ = std::move(CloneProposal(*p1));
+                promised_ = std::move(CloneProposal(*p2));
+                return kErrCode_OK;
+            }
 
         private:
             IdGen ig_;
