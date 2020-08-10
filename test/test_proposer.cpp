@@ -18,11 +18,18 @@ struct DummyLocalConn: public LocalConn {
         virtual int DoRpcRequest(RpcReqData data) {
             auto rsp = CloneProposalMsg(*data.data_.get());
             auto req2 = CloneProposalMsg(*data.data_.get());
+            rsp->from_ = addr_.id_;
+            rsp->type_ = rsp->type_+1;
 
             if (req2->type_ == kMsgType_PREPARE_REQ && fake_rsp_) {
                 fake_rsp_->from_ = addr_.id_;
                 fake_rsp_->reqid_ = req2->reqid_;
                 fake_rsp_->type_ = kMsgType_PREPARE_RSP;
+                auto reqfp = reinterpret_cast<Proposal*>(req2->data_);
+                auto rspfp = reinterpret_cast<Proposal*>(fake_rsp_->data_);
+                rspfp->pid_ = reqfp->pid_;
+                rspfp->value_id_ = reqfp->value_id_ + 1;
+
                 rsp = std::move(fake_rsp_);
             }
 
@@ -55,16 +62,27 @@ struct DummyRemoteConn: public RemoteConn {
             auto tm = std::chrono::milliseconds(1);
             std::this_thread::sleep_for(tm);
             self->HandleRecv(msg);
-            LOG_INFO << "dummy call to HandleRecv()";
+            auto pp = reinterpret_cast<Proposal*>(msg->data_);
+
+            LOG_INFO << "local(" << self->addr_.id_
+                     << ") dummy call to HandleRecv(), type: " << msg->type_
+                     << ",msg:(" << msg->reqid_ << "," << pp->opaque_ << ","
+                     << pp->value_id_ << ")";
           };
 
           auto req2 = CloneProposalMsg(*req.get());
-          auto rsp = std::move(req);
+          auto rsp = CloneProposalMsg(*req.get());
+          rsp->from_ = addr_.id_;
+          rsp->type_ = req->type_+1;
 
           if (req2->type_ == kMsgType_PREPARE_REQ && fake_rsp_) {
             fake_rsp_->from_ = addr_.id_;
             fake_rsp_->reqid_ = req2->reqid_;
             fake_rsp_->type_ = kMsgType_PREPARE_RSP;
+            auto reqfp = reinterpret_cast<Proposal*>(req2->data_);
+            auto rspfp = reinterpret_cast<Proposal*>(fake_rsp_->data_);
+            rspfp->pid_ = reqfp->pid_;
+            rspfp->value_id_ = reqfp->value_id_ + 1;
             rsp = std::move(fake_rsp_);
           }
 
@@ -176,6 +194,9 @@ TEST(proposer, doPropose) {
     ASSERT_EQ(0, memcmp("dummy value", p11->data_, 11));
     ASSERT_EQ(0, memcmp(p11, p12, ProposalHeaderSz + p11->size_));
     ASSERT_EQ(0, memcmp(p11, p13, ProposalHeaderSz + p11->size_));
+    ASSERT_TRUE(dr1->chosen_);
+    ASSERT_TRUE(dr2->chosen_);
+    ASSERT_TRUE(dlocal->chosen_);
 
     ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value"));
     ASSERT_EQ(config->local_id_, dr1->accepted_->from_);
@@ -191,5 +212,44 @@ TEST(proposer, doPropose) {
     ASSERT_EQ(0, memcmp(p21, p22, ProposalHeaderSz + p21->size_));
     ASSERT_EQ(0, memcmp(p21, p23, ProposalHeaderSz + p21->size_));
 
+    auto fake_rsp = AllocProposalMsg(12);
+    fake_rsp->type_ = kMsgType_PREPARE_RSP;
+
+    auto fp = reinterpret_cast<Proposal*>(fake_rsp->data_);
+    fp->proposer_ = 2;
+    fp->opaque_ = 0xbadf00d + 23;
+    fp->status_ = kPaxosState_PROMISED;
+    memcpy(fp->data_, "miliao dummy", 12);
+
+    dr1->fake_rsp_ = fake_rsp;
+
+    LOG_INFO << "......last vote test......";
+    ASSERT_EQ(kErrCode_PREPARE_PEER_VALUE, pp.Propose(0xbadf00d, "dummy value"));
+
+    ASSERT_EQ(1, dr1->accepted_->from_);
+    ASSERT_EQ(1, dr2->accepted_->from_);
+    ASSERT_EQ(1, dlocal->accepted_->from_);
+    ASSERT_EQ(kMsgType_ACCEPT_REQ, dr1->accepted_->type_);
+    ASSERT_EQ(kMsgType_ACCEPT_REQ, dr2->accepted_->type_);
+    ASSERT_EQ(kMsgType_ACCEPT_REQ, dlocal->accepted_->type_);
+
+    auto p31 = reinterpret_cast<Proposal*>(dr1->accepted_->data_);
+    auto p32 = reinterpret_cast<Proposal*>(dr2->accepted_->data_);
+    auto p33 = reinterpret_cast<Proposal*>(dlocal->accepted_->data_);
+    ASSERT_EQ(2, p31->proposer_);
+    ASSERT_EQ(2, p32->proposer_);
+    ASSERT_EQ(2, p33->proposer_);
+    ASSERT_EQ(kPaxosState_ACCEPTED, p31->status_);
+    ASSERT_EQ(kPaxosState_ACCEPTED, p32->status_);
+    ASSERT_EQ(kPaxosState_ACCEPTED, p33->status_);
+    ASSERT_EQ(12, p31->size_);
+    ASSERT_EQ(12, p32->size_);
+    ASSERT_EQ(12, p33->size_);
+    ASSERT_EQ(0xbadf00d+23, p31->opaque_);
+    ASSERT_EQ(0xbadf00d+23, p32->opaque_);
+    ASSERT_EQ(0xbadf00d+23, p33->opaque_);
+    ASSERT_EQ(0, memcmp("miliao dummy", p31->data_, 11));
+    ASSERT_EQ(0, memcmp(p31, p32, ProposalHeaderSz + p31->size_));
+    ASSERT_EQ(0, memcmp(p31, p33, ProposalHeaderSz + p31->size_));
     // TODO
 }

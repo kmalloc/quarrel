@@ -2,6 +2,7 @@
 #include "logger.h"
 
 #include <atomic>
+#include <assert.h>
 
 namespace quarrel {
 
@@ -59,11 +60,15 @@ namespace quarrel {
             return ret;
         }
 
+        pp = reinterpret_cast<Proposal*>(pm->data_);
+
         // set value
         if (ret != kErrCode_PREPARE_PEER_VALUE) {
             pp->size_ += val.size();
             pm->size_ += val.size();
             memcpy(pp->data_, val.data(), val.size());
+        } else {
+            assert(pp->size_);
         }
 
         if (pp->size_ == 0) {
@@ -72,7 +77,8 @@ namespace quarrel {
         }
 
         pm->type_ = kMsgType_ACCEPT_REQ;
-        pp->status_ = kPaxosState_PROMISED;
+        pm->from_ = config_->local_id_;
+        pp->status_ = kPaxosState_ACCEPTED;
 
         auto ret2 = doAccept(pm);
 
@@ -146,7 +152,7 @@ namespace quarrel {
 
         for (auto idx = 0; idx < ctx->rsp_count_; ++idx) {
             std::shared_ptr<PaxosMsg> m = std::move(ctx->rsp_msg_[idx]);
-            auto rsp_proposal = reinterpret_cast<Proposal*>(pm->data_);
+            auto rsp_proposal = reinterpret_cast<Proposal*>(m->data_);
 
             if (rsp_proposal->pid_ > origin_proposal->pid_) {
                 // rejected
@@ -156,6 +162,8 @@ namespace quarrel {
 
             if (rsp_proposal->value_id_ != origin_proposal->value_id_ || rsp_proposal->opaque_ != origin_proposal->opaque_) {
                 // peer responses with last vote
+                assert(rsp_proposal->size_ > 0);
+                LOG_INFO << "peer return last vote, from:" << m->from_;
                 auto lastp = reinterpret_cast<Proposal*>(last_voted->data_);
                 if (last_voted.get() == NULL || lastp->pid_ < rsp_proposal->pid_) {
                     // last vote with the largest prepare id, no majority is required(TODO: maybe we should)
@@ -168,7 +176,7 @@ namespace quarrel {
 
         if (valid_rsp >= majority) {
             if (last_voted) {
-                pm = std::move(last_voted);
+                pm.swap(last_voted);
                 return kErrCode_PREPARE_PEER_VALUE;
             }
             return kErrCode_OK;
