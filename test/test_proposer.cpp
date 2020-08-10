@@ -27,7 +27,7 @@ struct DummyLocalConn: public LocalConn {
                 fake_rsp_->type_ = kMsgType_PREPARE_RSP;
                 auto reqfp = reinterpret_cast<Proposal*>(req2->data_);
                 auto rspfp = reinterpret_cast<Proposal*>(fake_rsp_->data_);
-                rspfp->pid_ = reqfp->pid_;
+                rspfp->pid_ = reqfp->pid_ - addr_.id_;
                 rspfp->value_id_ = reqfp->value_id_ + 1;
 
                 rsp = std::move(fake_rsp_);
@@ -66,8 +66,9 @@ struct DummyRemoteConn: public RemoteConn {
 
             LOG_INFO << "local(" << this->addr_.id_
                      << ") dummy call to HandleRecv(), type: " << msg->type_
-                     << ",msg:(" << msg->reqid_ << "," << pp->opaque_ << ","
-                     << pp->value_id_ << ")";
+                     << ",msg:(reqid-" << msg->reqid_ << ", opaque-"
+                     << pp->opaque_ << ", vid-" << pp->value_id_
+                     << ", pid-" << pp->pid_ << ")";
           };
 
           auto req2 = CloneProposalMsg(*req.get());
@@ -81,7 +82,7 @@ struct DummyRemoteConn: public RemoteConn {
             fake_rsp_->type_ = kMsgType_PREPARE_RSP;
             auto reqfp = reinterpret_cast<Proposal*>(req2->data_);
             auto rspfp = reinterpret_cast<Proposal*>(fake_rsp_->data_);
-            rspfp->pid_ = reqfp->pid_;
+            rspfp->pid_ = reqfp->pid_ - addr_.id_;
             rspfp->value_id_ = reqfp->value_id_ + 1;
             rsp = std::move(fake_rsp_);
           }
@@ -228,7 +229,7 @@ TEST(proposer, doPropose) {
 
     dr1->fake_rsp_ = fake_rsp;
 
-    LOG_INFO << "......last vote test......";
+    LOG_INFO << "#########last vote test##########";
     ASSERT_EQ(kErrCode_PREPARE_PEER_VALUE, pp.Propose(0xbadf00d, "dummy value"));
 
     ASSERT_EQ(1, dr1->accepted_->from_);
@@ -253,8 +254,41 @@ TEST(proposer, doPropose) {
     ASSERT_EQ(0xbadf00d+23, p31->opaque_);
     ASSERT_EQ(0xbadf00d+23, p32->opaque_);
     ASSERT_EQ(0xbadf00d+23, p33->opaque_);
-    ASSERT_EQ(0, memcmp("miliao dummy", p31->data_, 11));
+    ASSERT_EQ(0, memcmp("miliao dummy", p31->data_, 12));
     ASSERT_EQ(0, memcmp(p31, p32, ProposalHeaderSz + p31->size_));
     ASSERT_EQ(0, memcmp(p31, p33, ProposalHeaderSz + p31->size_));
+
+    auto fake_rsp2 = CloneProposalMsg(*fake_rsp);
+    auto pp2 = reinterpret_cast<Proposal*>(fake_rsp2->data_);
+    pp2->proposer_ = 3;
+    pp2->opaque_ = 0xbadf00d+43;
+    strncpy(reinterpret_cast<char*>(pp2->data_), "mi1ia0 dummy", pp2->size_);
+
+    dr1->fake_rsp_ = fake_rsp2;
+    dr2->fake_rsp_ = fake_rsp;
+
+    LOG_INFO << "@@@@@@test multiple last vote@@@@@";
+    ASSERT_EQ(kErrCode_PREPARE_PEER_VALUE, pp.Propose(0xbadf00d, "dummy value"));
+
+    auto p41 = reinterpret_cast<Proposal*>(dr1->accepted_->data_);
+    auto p42 = reinterpret_cast<Proposal*>(dr2->accepted_->data_);
+    auto p43 = reinterpret_cast<Proposal*>(dlocal->accepted_->data_);
+    ASSERT_EQ(3, p41->proposer_);
+    ASSERT_EQ(3, p42->proposer_);
+    ASSERT_EQ(3, p43->proposer_);
+    ASSERT_EQ(kPaxosState_ACCEPTED, p41->status_);
+    ASSERT_EQ(kPaxosState_ACCEPTED, p42->status_);
+    ASSERT_EQ(kPaxosState_ACCEPTED, p43->status_);
+    ASSERT_EQ(12, p41->size_);
+    ASSERT_EQ(12, p42->size_);
+    ASSERT_EQ(12, p43->size_);
+    ASSERT_EQ(0xbadf00d+43, p41->opaque_);
+    ASSERT_EQ(0xbadf00d+43, p42->opaque_);
+    ASSERT_EQ(0xbadf00d+43, p43->opaque_);
+    ASSERT_EQ(0, memcmp("mi1ia0 dummy", p41->data_, 12));
+    ASSERT_EQ(0, memcmp(p41, p42, ProposalHeaderSz + p41->size_));
+    ASSERT_EQ(0, memcmp(p41, p43, ProposalHeaderSz + p41->size_));
     // TODO
+
+    // multiple entry test.
 }
