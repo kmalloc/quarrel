@@ -29,6 +29,7 @@ namespace quarrel {
     };
 
     // conn is a connection abstraction to an acceptor.
+    // real connection can be created on top of tcp or udp or even in-process queue.
     class Conn {
         public:
             Conn(int type, AddrInfo addr): fd_(-1), type_(type), addr_(std::move(addr)) {}
@@ -52,11 +53,16 @@ namespace quarrel {
             AddrInfo addr_;
     };
 
+    // LocalConn is a conceptual connection to local acceptor within the same process.
+    // a default implementation is provided, usually user won't need to customize it.
     class LocalConn : public Conn {
         public:
             explicit LocalConn(AddrInfo addr): Conn(ConnType_LOCAL, std::move(addr)) {}
     };
 
+    // RemoteConn is a real network connection to a remote acceptor.
+    // a default tcp based socket implementation is provided, usually this suits most use cases.
+    // since network management differs a lot from framework to framework user can wrap their own RemoteConn using tcp/udp/http/rpc/etc.
     class RemoteConn: public Conn {
         public:
             RemoteConn(int concur_num, AddrInfo addr)
@@ -107,10 +113,6 @@ namespace quarrel {
             explicit ConnMng(std::shared_ptr<Configure> config): config_(std::move(config)) {}
 
             int CreateConn();
-
-            // poll conn & recv.
-            int StartWorker();
-            int StopWorker();
 
             void SetConnCreator(ConnCreator creator) {
                 conn_creator_ = std::move(creator);
