@@ -5,6 +5,7 @@
 
 namespace quarrel {
 
+// cast unique_ptr that is created without deleter.
 template<typename Derived, typename Base>
 std::unique_ptr<Derived>
 dynamic_unique_ptr_cast_nodel(std::unique_ptr<Base> p) {
