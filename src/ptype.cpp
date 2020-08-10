@@ -24,7 +24,7 @@ namespace quarrel {
         pp->size_  = value_size;
 
         rp->magic_ = 0xbadf00d;
-        rp->size_  = ProposalHeaderSz + value_size;
+        rp->size_  = static_cast<uint32_t>(ProposalHeaderSz + value_size);
 
         std::shared_ptr<PaxosMsg> p(rp, free);
         return p;

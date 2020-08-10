@@ -30,15 +30,15 @@ namespace quarrel {
       pp->batch_num_ = 1;
       pp->pentry_ = entry;
       pp->opaque_ = opaque;
-      pp->proposer_ = config_->local_id_;
       pp->status_ = kPaxosState_PREPARED;
+      pp->proposer_ = uint16_t(config_->local_id_);
       pp->value_id_ = pmn_->GenValueId(pinst, entry, pid);
 
       return pm;
     }
 
     int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
-        auto pm = allocPaxosMsg(pinst, opaque, val.size());
+        auto pm = allocPaxosMsg(pinst, opaque, uint32_t(val.size()));
         if (!pm) return kErrCode_OOM;
 
         int ret = 0;
@@ -47,8 +47,8 @@ namespace quarrel {
         // don't send value for prepare,not necessary.
         // memcpy(pp->data_, val.data(), val.size());
 
-        pp->size_ -= val.size();
-        pm->size_ -= val.size();
+        pp->size_ -= uint32_t(val.size());
+        pm->size_ -= uint32_t(val.size());
 
         if (val.empty() || !canSkipPrepare(pinst, pp->pentry_)) {
             // empty val indicates a read probe which must always perform
@@ -64,8 +64,8 @@ namespace quarrel {
 
         // set value
         if (ret != kErrCode_PREPARE_PEER_VALUE) {
-            pp->size_ += val.size();
-            pm->size_ += val.size();
+            pp->size_ += uint32_t(val.size());
+            pm->size_ += uint32_t(val.size());
             memcpy(pp->data_, val.data(), val.size());
         } else {
             assert(pp->size_);
@@ -99,6 +99,7 @@ namespace quarrel {
         // 1. #0 proposal opmitization.
         // 2. or master optimization.
         // 3. batch request for multiple paxos entry.
+        (void)pinst;(void)entry;
         return false;
     }
 
@@ -127,7 +128,7 @@ namespace quarrel {
             return std::move(ctx);
         }
 
-        for (auto i = 0; i < remote.size(); ++i) {
+        for (auto i = 0u; i < remote.size(); ++i) {
             remote[i]->DoRpcRequest(req);
         }
 
@@ -142,7 +143,7 @@ namespace quarrel {
         // send to local conn
         // then to remote
 
-        int valid_rsp = 0;
+        uint32_t valid_rsp = 0;
         std::shared_ptr<PaxosMsg> last_voted;
         auto majority = config_->total_acceptor_/2 + 1;
         auto origin_proposal = reinterpret_cast<Proposal*>(pm->data_);
@@ -194,7 +195,7 @@ namespace quarrel {
         auto ctx = doBatchRpcRequest(majority, pm);
         if (ctx->ret_ != kErrCode_OK) return ctx->ret_;
 
-        int valid_rsp = 0;
+        uint32_t valid_rsp = 0;
         for (auto idx = 0; idx < ctx->rsp_count_; ++idx) {
             std::shared_ptr<PaxosMsg> m = std::move(ctx->rsp_msg_[idx]);
             auto rsp_proposal = reinterpret_cast<Proposal*>(pm->data_);

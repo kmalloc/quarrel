@@ -131,7 +131,7 @@ Logger::Logger(SourceFile file, int line, bool toAbort)
 Logger::~Logger() {
   impl_.finish();
   auto str = stream().str();
-  g_output(str.data(), str.length());
+  g_output(str.data(), (int)str.length());
   if (impl_.level_ == FATAL) {
     g_flush();
     abort();

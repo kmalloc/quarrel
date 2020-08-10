@@ -22,7 +22,7 @@ namespace quarrel {
     class Entry {
         public:
             Entry(const Configure& config, uint64_t pinst, uint64_t entry)
-                :ig_(config.local_id_, config.total_acceptor_), vig_(0xff, 1) {}
+                :ig_(config.local_id_, config.total_acceptor_), vig_(0xff, 1), pinst_(pinst), entry_(entry) {}
 
             uint64_t GenValueId() { return vig_.GetAndInc(); }
             uint64_t GenPrepareId() { return ig_.GetAndInc(); }
@@ -33,20 +33,20 @@ namespace quarrel {
             const std::shared_ptr<Proposal>& GetProposal() const { return pp_; }
             const std::shared_ptr<Proposal>& GetPromised() const { return promised_; }
 
-            int SerializeTo(std::string& output) {
+            uint32_t SerializeTo(std::string& output) {
                 Proposal dummy;
                 memset(&dummy, 0xff, sizeof(dummy));
 
                 auto proposal_sz = ProposalHeaderSz + (pp_?pp_->size_:1);
                 auto promised_sz = ProposalHeaderSz + (promised_?promised_->size_:1);
-                auto total_sz = sizeof(EntryRaw) - 1 + proposal_sz + promised_sz;
+                auto total_sz = static_cast<uint32_t>(sizeof(EntryRaw) - 1 + proposal_sz + promised_sz);
 
                 output.clear();
                 output.resize(total_sz);
 
                 EntryRaw* raw = reinterpret_cast<EntryRaw*>(&output[0]);
-                raw->size_ = total_sz;
                 raw->version_ = 0x11;
+                raw->size_ = total_sz;
                 raw->value_id_ = vig_.Get();
                 raw->prepare_id_ = ig_.Get();
 
@@ -85,6 +85,8 @@ namespace quarrel {
         private:
             IdGen ig_;
             IdGenByDate vig_; // value IdGen
+            uint64_t pinst_;
+            uint64_t entry_;
             std::shared_ptr<Proposal> pp_; // proposal accepted
             std::shared_ptr<Proposal> promised_; // prepare request promised
     };
@@ -152,6 +154,7 @@ namespace quarrel {
             }
 
             uint64_t GenValueId(uint64_t entry, uint64_t pid) {
+                (void)pid;// eliminate warning
                 Entry& ent = GetEntry(entry);
                 return ent.GenValueId();
             }
@@ -184,7 +187,7 @@ namespace quarrel {
                 entries_.clear();
                 entries_.reserve(config_->plog_inst_num_);
 
-                for (auto i = 0; i < config_->plog_inst_num_; ++i) {
+                for (auto i = 0u; i < config_->plog_inst_num_; ++i) {
                     entries_.push_back(creator_(i, config_));
                 }
 

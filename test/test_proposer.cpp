@@ -58,13 +58,13 @@ struct DummyRemoteConn: public RemoteConn {
         virtual ~DummyRemoteConn() {}
 
         virtual int DoWrite(std::shared_ptr<PaxosMsg> req) {
-          auto rsper = [self = this](std::shared_ptr<PaxosMsg> msg) mutable {
+          auto rsper = [this](std::shared_ptr<PaxosMsg> msg) mutable {
             auto tm = std::chrono::milliseconds(1);
             std::this_thread::sleep_for(tm);
-            self->HandleRecv(msg);
+            this->HandleRecv(msg);
             auto pp = reinterpret_cast<Proposal*>(msg->data_);
 
-            LOG_INFO << "local(" << self->addr_.id_
+            LOG_INFO << "local(" << this->addr_.id_
                      << ") dummy call to HandleRecv(), type: " << msg->type_
                      << ",msg:(" << msg->reqid_ << "," << pp->opaque_ << ","
                      << pp->value_id_ << ")";
@@ -111,20 +111,25 @@ struct DummyEntryMng: public EntryMng {
         :EntryMng(std::move(config), pinst) {}
 
     virtual int SaveEntry(uint64_t pinst, uint64_t entry, const Entry& ent) {
+        (void)pinst;(void)entry;(void)ent;
         return kErrCode_OK;
     }
     virtual int LoadEntry(uint64_t pinst, uint64_t entry, Entry& ent) {
+        (void)pinst;(void)entry;(void)ent;
         return kErrCode_OK;
     }
     virtual int Checkpoint(uint64_t pinst, uint64_t term) {
+        (void)pinst;(void)term;
         return kErrCode_OK;
     }
 
     virtual uint64_t GetMaxCommittedEntry(uint64_t pinst) {
+        (void)pinst;
         return max_committed_;
     }
 
     virtual int LoadUncommittedEntry(std::vector<std::unique_ptr<Entry>>& entries) {
+        (void)entries;
         return kErrCode_OK;
     }
 
@@ -167,8 +172,8 @@ TEST(proposer, doPropose) {
     Proposer pp(config);
     std::shared_ptr<PlogMng> pmn = std::make_shared<PlogMng>(config);
 
-    auto entry_mng_creator = [](int pinst, std::shared_ptr<Configure> config) -> std::unique_ptr<EntryMng> {
-        return std::unique_ptr<EntryMng>(new DummyEntryMng(std::move(config), pinst));
+    auto entry_mng_creator = [](int pinst, std::shared_ptr<Configure> conf) -> std::unique_ptr<EntryMng> {
+        return std::unique_ptr<EntryMng>(new DummyEntryMng(std::move(conf), pinst));
     };
 
     pmn->SetEntryMngCreator(entry_mng_creator);

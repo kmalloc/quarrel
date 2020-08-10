@@ -12,13 +12,13 @@ namespace quarrel {
     };
 
     struct Configure {
-        uint32_t timeout_;  // timeout for propose operation.
-        uint32_t local_id_; // local paxos id
-        uint32_t total_acceptor_;
+        uint32_t timeout_{0};  // timeout for propose operation.
+        uint32_t local_id_{0}; // local paxos id
+        uint32_t total_acceptor_{0};
 
-        uint32_t msg_version_; // msg version
-        uint32_t storage_type_; // storage type for plog
-        uint32_t plog_inst_num_; // plog instance number
+        uint32_t msg_version_{0}; // msg version
+        uint32_t storage_type_{0}; // storage type for plog
+        uint32_t plog_inst_num_{0}; // plog instance number
         std::string local_storage_path_; // storage path
 
         AddrInfo local_;

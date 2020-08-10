@@ -1,4 +1,4 @@
-CXXFLAGS = -Wfatal-errors -Wall -Wextra -Wpedantic -Wconversion -Wshadow -std=c++11 -O2 -g
+CXXFLAGS = -Wfatal-errors -Wall -Wextra -Wpedantic -Wconversion -Wshadow -std=c++11 -O2 -g -Werror
 
 # Put all auto generated stuff to this build dir.
 BUILD_DIR = ./build

@@ -5,7 +5,8 @@
 using namespace quarrel;
 
 TEST(quarrel_plog, test_entry_serialization) {
-    Configure config = {0};
+    Configure config;
+
     config.local_id_ = 23;
     config.total_acceptor_ = 23;
 
