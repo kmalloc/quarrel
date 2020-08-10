@@ -6,6 +6,7 @@
 
 namespace quarrel {
     struct AddrInfo {
+        int id_;
         int type_; // addr type, 1 for ipv4 2 for ipv6 3 for in-process queue(for testing).
         std::string addr_;
     };
