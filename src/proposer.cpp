@@ -163,8 +163,13 @@ namespace quarrel {
 
             if (rsp_proposal->value_id_ != origin_proposal->value_id_ || rsp_proposal->opaque_ != origin_proposal->opaque_) {
                 // peer responses with last vote
+
+                LOG_INFO << "peer return last vote, from:" << m->from_
+                         << ", pid:" << rsp_proposal->pid_
+                         << ", vid:" << rsp_proposal->value_id_;
+
                 assert(rsp_proposal->size_ > 0);
-                LOG_INFO << "peer return last vote, from:" << m->from_;
+
                 auto lastp = reinterpret_cast<Proposal*>(last_voted->data_);
                 if (last_voted.get() == NULL || lastp->pid_ < rsp_proposal->pid_) {
                     // last vote with the largest prepare id, no majority is required(TODO: maybe we should)
