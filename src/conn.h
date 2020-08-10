@@ -71,6 +71,9 @@ namespace quarrel {
 
             virtual ~RemoteConn() {}
 
+            // customized point: implementation needed here
+            virtual int DoWrite(std::shared_ptr<PaxosMsg> msg) = 0;
+
             virtual int DoRpcRequest(RpcReqData req) {
                 req.data_->reqid_ = reqid_.GetAndInc();
                 req_.Put(req.data_->reqid_, req);
@@ -96,9 +99,6 @@ namespace quarrel {
                 req_.Del(id);
                 return 0;
             }
-
-            // implementation needed
-            virtual int DoWrite(std::shared_ptr<PaxosMsg> msg) = 0;
 
         private:
             IdGenByDate reqid_;
