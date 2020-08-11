@@ -68,14 +68,14 @@ struct DummyRemoteConn: public RemoteConn {
         virtual ~DummyRemoteConn() {}
 
         virtual int DoWrite(std::shared_ptr<PaxosMsg> req) {
-
           auto rsper = [this](std::shared_ptr<PaxosMsg> msg) mutable {
             auto tm = std::chrono::milliseconds(1);
             std::this_thread::sleep_for(tm);
-            this->HandleRecv(msg);
-            auto pp = reinterpret_cast<Proposal*>(msg->data_);
 
-            LOG_INFO << "local(" << this->addr_.id_
+            this->HandleRecv(msg);
+            auto pp = GetProposalFromMsg(msg.get());
+
+            LOG_INFO << "acceptor(" << this->addr_.id_
                      << ") dummy call to HandleRecv(), type: " << msg->type_
                      << ",msg:(reqid-" << msg->reqid_ << ", opaque-"
                      << pp->opaque_ << ", vid-" << pp->value_id_
@@ -93,9 +93,14 @@ struct DummyRemoteConn: public RemoteConn {
             fake_rsp_->type_ = kMsgType_PREPARE_RSP;
             auto reqfp = GetProposalFromMsg(req2.get());
             auto rspfp = GetProposalFromMsg(fake_rsp_.get());
+
             rspfp->pid_ = reqfp->pid_ - addr_.id_;
             rspfp->value_id_ = reqfp->value_id_ + 1;
-            rsp = std::move(fake_rsp_);
+
+            LOG_INFO << "set reqid for last vote rsp, req pid:" << reqfp->pid_
+                     << ", rsp pid:" << rspfp->pid_;
+
+                rsp = std::move(fake_rsp_);
           }
 
           if ((rejectAccept_ && req2->type_ == kMsgType_ACCEPT_REQ) ||
@@ -149,7 +154,7 @@ struct DummyEntryMng: public EntryMng {
 
     virtual uint64_t GetMaxCommittedEntry(uint64_t pinst) {
         (void)pinst;
-        return max_committed_;
+        return max_committed_++%8;
     }
 
     virtual int LoadUncommittedEntry(std::vector<std::unique_ptr<Entry>>& entries) {
@@ -253,6 +258,11 @@ TEST(proposer, doPropose) {
     dr1->fake_rsp_ = fake_rsp;
 
     LOG_INFO << "#########last vote test##########";
+
+    for (auto i = 0 ;i < 16; i++) {
+        pmn->SetPrepareIdGreaterThan(0, i, 8);
+    }
+
     ASSERT_EQ(kErrCode_PREPARE_PEER_VALUE, pp.Propose(0xbadf00d, "dummy value"));
 
     ASSERT_EQ(1, dr1->accepted_->from_);
@@ -349,8 +359,6 @@ TEST(proposer, doPropose) {
 
     LOG_INFO << "test accept reject";
     ASSERT_EQ(kErrCode_ACCEPT_NOT_QUORAUM, pp.Propose(0xbadf00d, "dummy value"));
-
-    // TODO
 
     // multiple entry test.
 }
