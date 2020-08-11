@@ -18,8 +18,10 @@ TEST(waitgroup, testwg) {
     std::thread t3([&]() { wg.Notify(); });
 
     ASSERT_TRUE(wg.Wait(3));
-    ASSERT_TRUE(wg.Wait(3));
+    ASSERT_FALSE(wg.Wait(3));
 
+    wg.Notify();
+    wg.Notify();
     std::thread t4([&]() { wg.Notify(); });
 
     auto start = std::chrono::steady_clock::now();

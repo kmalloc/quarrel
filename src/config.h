@@ -15,6 +15,8 @@ namespace quarrel {
         uint32_t timeout_{0};  // timeout for propose operation.
         uint32_t local_id_{0}; // local paxos id
         uint32_t total_acceptor_{0};
+        uint32_t acceptor_worker_count_{0};
+        uint32_t worker_msg_queue_sz_{10000};
 
         uint32_t msg_version_{0}; // msg version
         uint32_t storage_type_{0}; // storage type for plog

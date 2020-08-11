@@ -37,7 +37,7 @@ class LockFreeQueue {
       return RT_OK;
     }
 
-    uint32_t totalSize = sizeof(Head) + (size + 1) * sizeof(Entry);
+    uint64_t totalSize = sizeof(Head) + (size + 1) * sizeof(Entry);
 
     head_ = reinterpret_cast<Head*>(new char[totalSize]);
 
