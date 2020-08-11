@@ -24,6 +24,7 @@ namespace quarrel {
       pm->version_ = config_->msg_version_;
 
       auto pp = reinterpret_cast<Proposal*>(pm->data_);
+
       // pp->term_ = xxxxx;
       pp->pid_ = pid;
       pp->plid_ = pinst;
