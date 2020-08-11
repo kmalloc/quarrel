@@ -25,12 +25,20 @@ struct DummyLocalConn: public LocalConn {
                 fake_rsp_->from_ = addr_.id_;
                 fake_rsp_->reqid_ = req2->reqid_;
                 fake_rsp_->type_ = kMsgType_PREPARE_RSP;
-                auto reqfp = reinterpret_cast<Proposal*>(req2->data_);
-                auto rspfp = reinterpret_cast<Proposal*>(fake_rsp_->data_);
+                auto reqfp = GetProposalFromMsg(req2.get());
+                auto rspfp = GetProposalFromMsg(fake_rsp_.get());
                 rspfp->pid_ = reqfp->pid_ - addr_.id_;
                 rspfp->value_id_ = reqfp->value_id_ + 1;
 
                 rsp = std::move(fake_rsp_);
+            }
+
+            if ((rejectAccept_ && req2->type_ == kMsgType_ACCEPT_REQ) ||
+                (rejectPrepare_ && req2->type_ == kMsgType_PREPARE_REQ)) {
+              auto pp = GetProposalFromMsg(rsp.get());
+              auto pp2 = GetProposalFromMsg(req2.get());
+
+              pp->pid_ = pp2->pid_ + 1;
             }
 
             data.cb_(std::move(rsp));
@@ -47,6 +55,8 @@ struct DummyLocalConn: public LocalConn {
         }
 
         bool chosen_{false};
+        bool rejectPrepare_{false};
+        bool rejectAccept_{false};
         std::shared_ptr<PaxosMsg> accepted_;
         std::shared_ptr<PaxosMsg> promised_;
         std::shared_ptr<PaxosMsg> fake_rsp_;
@@ -58,6 +68,7 @@ struct DummyRemoteConn: public RemoteConn {
         virtual ~DummyRemoteConn() {}
 
         virtual int DoWrite(std::shared_ptr<PaxosMsg> req) {
+
           auto rsper = [this](std::shared_ptr<PaxosMsg> msg) mutable {
             auto tm = std::chrono::milliseconds(1);
             std::this_thread::sleep_for(tm);
@@ -80,11 +91,21 @@ struct DummyRemoteConn: public RemoteConn {
             fake_rsp_->from_ = addr_.id_;
             fake_rsp_->reqid_ = req2->reqid_;
             fake_rsp_->type_ = kMsgType_PREPARE_RSP;
-            auto reqfp = reinterpret_cast<Proposal*>(req2->data_);
-            auto rspfp = reinterpret_cast<Proposal*>(fake_rsp_->data_);
+            auto reqfp = GetProposalFromMsg(req2.get());
+            auto rspfp = GetProposalFromMsg(fake_rsp_.get());
             rspfp->pid_ = reqfp->pid_ - addr_.id_;
             rspfp->value_id_ = reqfp->value_id_ + 1;
             rsp = std::move(fake_rsp_);
+          }
+
+          if ((rejectAccept_ && req2->type_ == kMsgType_ACCEPT_REQ) ||
+              (rejectPrepare_ && req2->type_ == kMsgType_PREPARE_REQ)) {
+
+            LOG_ERR << "reject from remote";
+
+            auto pp = GetProposalFromMsg(rsp.get());
+            auto pp2 = GetProposalFromMsg(req2.get());
+            pp->pid_ = pp2->pid_ + 1;
           }
 
           std::async(std::launch::async, rsper, std::move(rsp));
@@ -102,6 +123,8 @@ struct DummyRemoteConn: public RemoteConn {
         }
 
         bool chosen_{false};
+        bool rejectPrepare_{false};
+        bool rejectAccept_{false};
         std::shared_ptr<PaxosMsg> accepted_;
         std::shared_ptr<PaxosMsg> promised_;
         std::shared_ptr<PaxosMsg> fake_rsp_;
@@ -288,6 +311,45 @@ TEST(proposer, doPropose) {
     ASSERT_EQ(0, memcmp("mi1ia0 dummy", p41->data_, 12));
     ASSERT_EQ(0, memcmp(p41, p42, ProposalHeaderSz + p41->size_));
     ASSERT_EQ(0, memcmp(p41, p43, ProposalHeaderSz + p41->size_));
+
+    LOG_INFO << "@@@@@@test reject@@@@@";
+    dr1->fake_rsp_.reset();
+    dr2->fake_rsp_.reset();
+    dlocal->fake_rsp_.reset();
+
+    dr1->rejectPrepare_ = true;
+    ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value"));
+
+    dr1->rejectPrepare_ = true;
+    dr2->rejectPrepare_ = true;
+    ASSERT_EQ(kErrCode_PREPARE_NOT_QUORAUM, pp.Propose(0xbadf00d, "dummy value"));
+
+    dr1->rejectPrepare_ = false;
+    dr2->rejectPrepare_ = false;
+    ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value"));
+
+    dr2->rejectAccept_ = true;
+    ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value"));
+
+    dr1->rejectPrepare_ = true;
+    dr2->rejectAccept_ = true;
+    ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value"));
+
+    dr1->rejectPrepare_ = false;
+    dr1->rejectAccept_ = false;
+
+    dr2->rejectPrepare_ = true;
+    dr2->rejectAccept_ = true;
+    ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value"));
+
+    dr1->rejectAccept_ = true;
+    dr1->rejectPrepare_ = false;
+    dr2->rejectAccept_ = true;
+    dr2->rejectPrepare_ = false;
+
+    LOG_INFO << "test accept reject";
+    ASSERT_EQ(kErrCode_ACCEPT_NOT_QUORAUM, pp.Propose(0xbadf00d, "dummy value"));
+
     // TODO
 
     // multiple entry test.

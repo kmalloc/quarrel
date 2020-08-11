@@ -188,7 +188,7 @@ namespace quarrel {
             return kErrCode_OK;
         }
 
-        return kErrCode_NOT_QUORAUM;
+        return kErrCode_PREPARE_NOT_QUORAUM;
     }
 
     int Proposer::doAccept(std::shared_ptr<PaxosMsg>& pm) {
@@ -203,7 +203,7 @@ namespace quarrel {
         uint32_t valid_rsp = 0;
         for (auto idx = 0; idx < ctx->rsp_count_; ++idx) {
             std::shared_ptr<PaxosMsg> m = std::move(ctx->rsp_msg_[idx]);
-            auto rsp_proposal = reinterpret_cast<Proposal*>(pm->data_);
+            auto rsp_proposal = reinterpret_cast<Proposal*>(m->data_);
 
             if (rsp_proposal->pid_ > origin_proposal->pid_) {
                 // rejected
@@ -227,7 +227,7 @@ namespace quarrel {
             return kErrCode_OK;
         }
 
-        return kErrCode_NOT_QUORAUM;
+        return kErrCode_ACCEPT_NOT_QUORAUM;
     }
 
     int Proposer::doChosen(std::shared_ptr<PaxosMsg>& pm) {

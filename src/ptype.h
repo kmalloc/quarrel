@@ -34,12 +34,13 @@ namespace quarrel {
         kErrCode_OK = 0,
         kErrCode_OOM = 3001,
         kErrCode_TIMEOUT= 3002,
-        kErrCode_NOT_QUORAUM = 3003,
-        kErrCode_CONN_FAIL = 3004,
-        kErrCode_PLOG_NOT_EXIST = 3005,
-        kErrCode_PREPARE_PEER_VALUE = 3006, // prepare return peer's value
-        kErrCode_INVALID_PLOG_DATA = 30007, // invalid formated plog data
-        kErrCode_UNMARSHAL_PLOG_FAIL = 30008, // unmarshal plog fail
+        kErrCode_PREPARE_NOT_QUORAUM = 3003,
+        kErrCode_ACCEPT_NOT_QUORAUM = 3004,
+        kErrCode_CONN_FAIL = 3005,
+        kErrCode_PLOG_NOT_EXIST = 3006,
+        kErrCode_PREPARE_PEER_VALUE = 3007, // prepare return peer's value
+        kErrCode_INVALID_PLOG_DATA = 30008, // invalid formated plog data
+        kErrCode_UNMARSHAL_PLOG_FAIL = 30009, // unmarshal plog fail
     };
 
     constexpr int MAX_ACCEPTOR_NUM = 32;
@@ -78,6 +79,10 @@ namespace quarrel {
     std::shared_ptr<Proposal> AllocProposal(uint32_t value_size);
     std::shared_ptr<PaxosMsg> CloneProposalMsg(const PaxosMsg& pm);
     std::shared_ptr<PaxosMsg> AllocProposalMsg(uint32_t value_size);
+
+    inline Proposal* GetProposalFromMsg(PaxosMsg* pm) {
+        return reinterpret_cast<Proposal*>(pm->data_);
+    }
 }
 
 #endif
