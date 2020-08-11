@@ -6,6 +6,7 @@
 #include "plog.h"
 #include "config.h"
 
+#include <atomic>
 #include <thread>
 #include <memory>
 #include <vector>
@@ -22,7 +23,7 @@ namespace quarrel {
             // ensuring that each plog instance is mutated from one thread only.
             int StartWorker();
             int StopWorker();
-            int AddMsg(std::unique_ptr<PaxosMsg> msg);
+            int AddMsg(std::shared_ptr<PaxosMsg> msg);
 
         private:
             Acceptor(const Acceptor&) = delete;
@@ -30,15 +31,16 @@ namespace quarrel {
 
             int Accept(const Proposal& proposal);
             int Prepare(const Proposal& proposal);
-            int HandleMsg(std::unique_ptr<PaxosMsg> msg);
+            int HandleMsg(std::shared_ptr<PaxosMsg> msg);
 
         private:
             uint64_t term_; // logical time
+            std::atomic<uint8_t> stop_{0};
             std::shared_ptr<PlogMng> pmn_;
             std::shared_ptr<Configure> config_;
 
             std::vector<std::thread> thread_;
-            std::vector<LockFreeQueue<std::unique_ptr<PaxosMsg>>> msg_;
+            std::vector<LockFreeQueue<std::shared_ptr<PaxosMsg>>> msg_;
     };
 }
 

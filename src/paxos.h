@@ -5,7 +5,6 @@
 #include <string>
 #include <vector>
 #include <memory>
-#include <unordered_map>
 
 #include "conn.h"
 #include "plog.h"
