@@ -22,7 +22,7 @@ namespace quarrel {
 
     class Acceptor {
         public:
-            explicit Acceptor(std::shared_ptr<Configure> config);
+            Acceptor(std::shared_ptr<Configure> config, std::shared_ptr<PlogMng> pm);
             ~Acceptor();
 
             // An acceptor maintains several worker threads,
@@ -32,6 +32,14 @@ namespace quarrel {
             int StartWorker();
             int StopWorker();
             int AddMsg(std::shared_ptr<PaxosMsg> msg);
+
+            void SetPlogMng(std::shared_ptr<PlogMng> pm) {
+                pmn_ = std::move(pm);
+            }
+
+            void SetConfig(std::shared_ptr<Configure> config) {
+                config_ = std::move(config);
+            }
 
         private:
             Acceptor(const Acceptor&) = delete;
