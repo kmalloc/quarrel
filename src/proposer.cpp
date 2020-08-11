@@ -172,7 +172,10 @@ namespace quarrel {
 
                 auto lastp = reinterpret_cast<Proposal*>(last_voted->data_);
                 if (last_voted.get() == NULL || lastp->pid_ < rsp_proposal->pid_) {
-                    // last vote with the largest prepare id, no majority is required(TODO: maybe we should)
+                    // last vote with the largest prepare id
+
+                    // FIXME: no majority is required(maybe we should)
+                    // consistency is maintained, but this value come from nowhere may surprise user.
                     last_voted = std::move(m);
                 }
             }
