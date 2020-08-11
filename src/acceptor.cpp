@@ -20,13 +20,10 @@ namespace quarrel {
     int Acceptor::StartWorker() {
         if (started_) return kErrCode_WORKER_ALREADY_STARTED;
 
-        run_ = 1;
-        started_ = true;
-
+        auto num = config_->acceptor_worker_count_;
         assert(config_->acceptor_worker_count_ < config_->plog_inst_num_);
 
-        auto num = config_->acceptor_worker_count_;
-
+        run_ = 1;
         workers_.clear();
         workers_.reserve(num);
 
@@ -38,6 +35,7 @@ namespace quarrel {
             workers_.push_back(std::move(wd));
         }
 
+        started_ = true;
         return kErrCode_OK;
     }
 
