@@ -22,7 +22,7 @@ namespace quarrel {
 
     class Acceptor {
         public:
-            Acceptor(std::shared_ptr<Configure> config, std::shared_ptr<PlogMng> pm);
+            explicit Acceptor(std::shared_ptr<Configure> config);
             ~Acceptor();
 
             // An acceptor maintains several worker threads,

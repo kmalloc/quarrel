@@ -8,6 +8,7 @@ namespace quarrel {
         , acceptor_(config_), proposer_(config_) {
             proposer_.SetConnMng(conn_mng_);
             proposer_.SetPlogMng(plog_mng_);
+            acceptor_.SetPlogMng(plog_mng_);
     }
 
     Paxos::~Paxos() {}
