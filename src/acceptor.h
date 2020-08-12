@@ -17,7 +17,7 @@ namespace quarrel {
         WaitGroup wg_;
         std::thread th_;
         std::atomic<uint64_t> pending_{0};
-        LockFreeQueue<std::shared_ptr<PaxosMsg>> msg_;
+        LockFreeQueue<std::shared_ptr<PaxosMsg>> mq_;
     };
 
     class Acceptor {
@@ -47,7 +47,8 @@ namespace quarrel {
 
             int Accept(const Proposal& proposal);
             int Prepare(const Proposal& proposal);
-            int HandleMsg();
+
+            int WorkerProc(int workerid);
             int DoHandleMsg(std::shared_ptr<PaxosMsg> msg);
 
         private:

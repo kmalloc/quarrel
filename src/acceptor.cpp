@@ -18,7 +18,7 @@ int Acceptor::AddMsg(std::shared_ptr<PaxosMsg> msg) {
   auto pinst = pp->plid_;
   auto idx = pinst % workers_.size();
 
-  workers_[idx]->msg_.Enqueue(std::move(msg), false);
+  workers_[idx]->mq_.Enqueue(std::move(msg), false);
   if (workers_[idx]->pending_.fetch_add(1) == 0) {
     workers_[idx]->wg_.Notify();
   }
@@ -38,8 +38,8 @@ int Acceptor::StartWorker() {
   for (auto i = 0u; i < num; i++) {
     auto wd = std::unique_ptr<WorkerData>(new WorkerData);
     wd->wg_.Reset(1);
-    wd->msg_.Init(config_->worker_msg_queue_sz_);
-    wd->th_ = std::thread(&Acceptor::HandleMsg, this);
+    wd->mq_.Init(config_->worker_msg_queue_sz_);
+    wd->th_ = std::thread(&Acceptor::WorkerProc, this, i);
     workers_.push_back(std::move(wd));
   }
 
@@ -55,4 +55,27 @@ int Acceptor::StopWorker() {
   started_ = false;
   return kErrCode_OK;
 }
+
+int Acceptor::WorkerProc (int workerid) {
+    std::unique_ptr<WorkerData>& queue = workers_[workerid];
+    using QueueType = LockFreeQueue<std::shared_ptr<PaxosMsg>>;
+
+    while (run_ > 0) {
+        std::shared_ptr<PaxosMsg> m;
+        if (queue->mq_.Dequeue(m, false) == QueueType::RT_EMPTY) {
+            queue->wg_.Wait(100);
+            continue;
+        }
+
+        DoHandleMsg(std::move(m));
+    }
+
+    return 0;
+}
+
+int Acceptor::DoHandleMsg (std::shared_ptr<PaxosMsg> msg) {
+    // TODO imp needed
+    return 0;
+}
+
 }  // namespace quarrel

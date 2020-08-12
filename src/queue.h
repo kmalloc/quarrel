@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <string.h>
+#include <memory>
 
 namespace quarrel {
 
@@ -141,7 +142,7 @@ class LockFreeQueue {
           FLAG_GETTOOK);
     } while (!success);
 
-    val = (reinterpret_cast<Entry*>(&(head_[1])))[pos].data;
+    val = std::move((reinterpret_cast<Entry*>(&(head_[1])))[pos].data);
 
     __sync_synchronize();
 
