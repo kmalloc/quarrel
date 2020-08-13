@@ -66,7 +66,6 @@ namespace quarrel {
             bool started_{false};
             std::atomic<uint8_t> run_{0};
 
-            std::shared_ptr<ConnMng> conn_;
             std::shared_ptr<PlogMng> pmn_;
             std::shared_ptr<Configure> config_;
 
