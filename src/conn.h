@@ -66,44 +66,45 @@ namespace quarrel {
     class RemoteConn: public Conn {
         public:
             RemoteConn(int concur_num, AddrInfo addr)
-            : Conn(ConnType_REMOTE, std::move(addr)), reqid_(0xff,1), req_(concur_num) {
+            : Conn(ConnType_REMOTE, std::move(addr)), reqid_(0xff,1), reqToRemote_(concur_num) {
             }
 
             virtual ~RemoteConn() {}
 
             // customized point: implementation needed here
+            // this function may be called from multiple threads.
+            // make sure it is thread safe.
             virtual int DoWrite(std::shared_ptr<PaxosMsg> msg) = 0;
 
             virtual int DoRpcRequest(RpcReqData req) {
                 req.data_->reqid_ = reqid_.GetAndInc();
-                req_.Put(req.data_->reqid_, req);
+                reqToRemote_.Put(req.data_->reqid_, req);
                 auto ret = DoWrite(req.data_);
                 if (ret != kErrCode_OK) {
-                    req_.Del(req.data_->reqid_);
+                    reqToRemote_.Del(req.data_->reqid_);
                     return ret;
                 }
-
                 return kErrCode_OK;
             }
 
             // HandleRecv handle msg received from the connected acceptor.
             virtual int HandleRecv(std::shared_ptr<PaxosMsg> req) {
-                auto rd = req_.GetPtr(req->reqid_);
-                auto noop = [](std::shared_ptr<PaxosMsg>){ return 0; };
+                auto rd = reqToRemote_.GetPtr(req->reqid_);
+                auto noop = [this](std::shared_ptr<PaxosMsg> m){ return DoWrite(std::move(m)); };
                 if (!rd) {
                     return onReq_(std::move(req), noop);
                 }
 
                 auto id = req->reqid_;
                 rd->cb_(std::move(req));
-                req_.Del(id);
+                reqToRemote_.Del(id);
                 return 0;
             }
 
         private:
             IdGenByDate reqid_;
             RequestHandler onReq_;
-            LruMap<uint64_t, RpcReqData> req_;
+            LruMap<uint64_t, RpcReqData> reqToRemote_;
     };
 
     using ConnCreator = std::function<std::unique_ptr<Conn>(AddrInfo)>;

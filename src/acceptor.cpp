@@ -11,20 +11,6 @@ Acceptor::~Acceptor() {
     StopWorker();
 }
 
-int Acceptor::AddMsg(std::shared_ptr<PaxosMsg> msg) {
-  if (!started_) return kErrCode_WORKER_NOT_STARTED;
-
-  auto pp = GetProposalFromMsg(msg.get());
-  auto pinst = pp->plid_;
-  auto idx = pinst % workers_.size();
-
-  workers_[idx]->mq_.Enqueue(std::move(msg), false);
-  if (workers_[idx]->pending_.fetch_add(1) == 0) {
-    workers_[idx]->wg_.Notify();
-  }
-  return kErrCode_OK;
-}
-
 int Acceptor::StartWorker() {
   if (started_) return kErrCode_WORKER_ALREADY_STARTED;
 
@@ -56,26 +42,67 @@ int Acceptor::StopWorker() {
   return kErrCode_OK;
 }
 
+int Acceptor::AddMsg(std::shared_ptr<PaxosMsg> msg, ResponseCallback cb) {
+  if (!started_) return kErrCode_WORKER_NOT_STARTED;
+
+  auto pp = GetProposalFromMsg(msg.get());
+  auto pinst = pp->plid_;
+  auto idx = pinst % workers_.size();
+
+  PaxosRequest req;
+  req.cb_ = std::move(cb);
+  req.msg_ = std::move(msg);
+
+  workers_[idx]->mq_.Enqueue(std::move(req), false);
+  if (workers_[idx]->pending_.fetch_add(1) == 0) {
+    workers_[idx]->wg_.Notify();
+  }
+
+  return kErrCode_OK;
+}
+
 int Acceptor::WorkerProc (int workerid) {
+    using QueueType = LockFreeQueue<PaxosRequest>;
     std::unique_ptr<WorkerData>& queue = workers_[workerid];
-    using QueueType = LockFreeQueue<std::shared_ptr<PaxosMsg>>;
 
     while (run_ > 0) {
-        std::shared_ptr<PaxosMsg> m;
-        if (queue->mq_.Dequeue(m, false) == QueueType::RT_EMPTY) {
+        PaxosRequest req;
+        if (queue->mq_.Dequeue(req, false) == QueueType::RT_EMPTY) {
             queue->wg_.Wait(100);
             continue;
         }
 
-        DoHandleMsg(std::move(m));
+        DoHandleMsg(std::move(req));
+        queue->pending_.fetch_sub(1);
     }
 
     return 0;
 }
 
-int Acceptor::DoHandleMsg (std::shared_ptr<PaxosMsg> msg) {
-    // TODO imp needed
-    return 0;
+int Acceptor::DoHandleMsg (PaxosRequest req) {
+    auto pp = GetProposalFromMsg(req.msg_.get());
+    auto mtype = req.msg_->type_;
+
+    std::shared_ptr<PaxosMsg> rsp;
+
+    if (mtype == kMsgType_PREPARE_REQ) {
+        rsp = HandlePrepareReq(*pp);
+    } else if (mtype == kMsgType_ACCEPT_REQ) {
+        rsp = HandleAcceptReq(*pp);
+    } else if (mtype == kMsgType_CHOSEN_REQ) {
+        rsp = HandleChosenReq(*pp);
+    } else {
+        assert(0);
+    }
+
+    req.cb_(rsp);
+    return kErrCode_OK;
+}
+
+std::shared_ptr<PaxosMsg> Acceptor::HandlePrepareReq (const Proposal& pp) {
+    auto pinst = pp.plid_;
+    auto entry = pp.pentry_;
+    auto status = pp.status_;
 }
 
 }  // namespace quarrel
