@@ -85,19 +85,25 @@ int Acceptor::DoHandleMsg(PaxosRequest req) {
 
   if (mtype == kMsgType_PREPARE_REQ) {
     rsp = HandlePrepareReq(*pp);
+    rsp->type_ = kMsgType_PREPARE_RSP;
   } else if (mtype == kMsgType_ACCEPT_REQ) {
     rsp = HandleAcceptReq(*pp);
+    rsp->type_ = kMsgType_ACCEPT_RSP;
   } else if (mtype == kMsgType_CHOSEN_REQ) {
     rsp = HandleChosenReq(*pp);
+    rsp->type_ = kMsgType_CHOSEN_RSP;
   } else {
     rsp = std::make_shared<PaxosMsg>();
     memcpy(rsp.get(), req.msg_.get(), PaxosMsgHeaderSz);
 
     rsp->size_ = 0;
-    rsp->from_ = config_->local_id_;
     rsp->type_ = kMsgType_INVALID_REQ;
   }
 
+  rsp->from_ = config_->local_id_;
+  rsp->version_ = req.msg_->version_;
+  rsp->magic_ = req.msg_->magic_;
+  rsp->reqid_ =req.msg_->reqid_;
   req.cb_(rsp);
   return kErrCode_OK;
 }
@@ -105,23 +111,34 @@ int Acceptor::DoHandleMsg(PaxosRequest req) {
 std::shared_ptr<PaxosMsg> Acceptor::HandlePrepareReq(const Proposal& pp) {
   auto pinst = pp.plid_;
   auto entry = pp.pentry_;
-  auto status = pp.status_;
 
   auto& ent = pmn_->GetEntry(pinst, entry);
 
-  auto& existed_pp = ent.GetProposal();
-  auto& existed_promise = ent.GetPromised();
+  std::shared_ptr<PaxosMsg> rsp;
+  const auto& existed_pp = ent.GetProposal();
+  const auto& existed_promise = ent.GetPromised();
+
+  auto vsize = 0;
+  const Proposal* from_pp = NULL;
 
   if (existed_pp) {
       // largest last vote
+      vsize = existed_pp->size_;
+      from_pp = existed_pp.get();
   } else if (existed_promise && existed_promise->pid_ >= pp.pid_) {
       // reject for previous promise
+      vsize = existed_promise->size_;
+      from_pp = existed_promise.get();
   } else {
       // a new proposal request
+      vsize = pp.size_;
+      from_pp = &pp;
   }
 
-  // TODO
-  (void)status;
+  auto ret = AllocProposalMsg(vsize);
+  auto rpp = GetProposalFromMsg(ret.get());
+
+  *rpp = *from_pp;
   return NULL;
 }
 
