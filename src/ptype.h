@@ -27,6 +27,7 @@ namespace quarrel {
         kMsgType_ACCEPT_RSP = 4,
         kMsgType_CHOSEN_REQ = 5,
         kMsgType_CHOSEN_RSP = 6,
+        kMsgType_INVALID_REQ = 7,
         kMsgType_CHORE_REQ = 101,
     };
 

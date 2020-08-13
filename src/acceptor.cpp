@@ -92,7 +92,12 @@ int Acceptor::DoHandleMsg (PaxosRequest req) {
     } else if (mtype == kMsgType_CHOSEN_REQ) {
         rsp = HandleChosenReq(*pp);
     } else {
-        assert(0);
+        rsp = std::make_shared<PaxosMsg>();
+        memcpy(rsp.get(), req.msg_.get(), PaxosMsgHeaderSz);
+
+        rsp->size_ = 0;
+        rsp->from_ = config_->local_id_;
+        rsp->type_ = kMsgType_INVALID_REQ;
     }
 
     req.cb_(rsp);
@@ -103,6 +108,9 @@ std::shared_ptr<PaxosMsg> Acceptor::HandlePrepareReq (const Proposal& pp) {
     auto pinst = pp.plid_;
     auto entry = pp.pentry_;
     auto status = pp.status_;
+    // TODO
+    (void)pinst;(void)entry;(void)status;
+    return NULL;
 }
 
 }  // namespace quarrel
