@@ -162,6 +162,19 @@ int Proposer::doPrepare(std::shared_ptr<PaxosMsg>& pm) {
     std::shared_ptr<PaxosMsg> m = std::move(ctx->rsp_msg_[idx]);
     auto rsp_proposal = reinterpret_cast<Proposal*>(m->data_);
 
+    if (m->type_ != kMsgType_PREPARE_RSP) {
+      LOG_ERR << "invalid prepare rsp type from peer, type:" << m->type_
+              << ", from:" << m->from_;
+      continue;
+    }
+
+    if (rsp_proposal->status_ != kPaxosState_PROMISED) {
+      LOG_ERR << "peer failed to promise, status:" << rsp_proposal->status_
+              << ", from:" << m->from_ << " @(" << rsp_proposal->plid_ << ","
+              << rsp_proposal->pentry_ << ")";
+      continue;
+    }
+
     if (rsp_proposal->pid_ > origin_proposal->pid_) {
       // rejected
       pmn_->SetPrepareIdGreaterThan(
@@ -217,6 +230,21 @@ int Proposer::doAccept(std::shared_ptr<PaxosMsg>& pm) {
   for (auto idx = 0; idx < ctx->rsp_count_; ++idx) {
     std::shared_ptr<PaxosMsg> m = std::move(ctx->rsp_msg_[idx]);
     auto rsp_proposal = reinterpret_cast<Proposal*>(m->data_);
+
+    if (m->type_ != kMsgType_ACCEPT_RSP) {
+      LOG_ERR << "invalid accept rsp type from peer, type:" << m->type_
+              << ", from:" << m->from_;
+      continue;
+    }
+
+    if (rsp_proposal->status_ != kPaxosState_ACCEPTED) {
+      LOG_ERR << "peer failed to accept, status:" << rsp_proposal->status_
+              << ", from:" << m->from_ << " @(" << rsp_proposal->plid_ << ","
+              << rsp_proposal->pentry_ << ")";
+      pmn_->SetPrepareIdGreaterThan(
+          origin_proposal->plid_, origin_proposal->pentry_, rsp_proposal->pid_);
+      continue;
+    }
 
     if (rsp_proposal->pid_ > origin_proposal->pid_) {
       // rejected

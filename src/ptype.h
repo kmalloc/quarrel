@@ -17,6 +17,8 @@ namespace quarrel {
         kPaxosState_ACCEPTED = 3,
         kPaxosState_CHOSEN   = 4,
         kPaxosState_COMMITED = 5,
+        kPaxosState_PROMISED_FAILED= 6,
+        kPaxosState_ACCEPTED_FAILED= 7,
     };
 
     enum PaxosMsgType {

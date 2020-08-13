@@ -1,5 +1,6 @@
 #include "acceptor.h"
 
+#include "logger.h"
 #include <assert.h>
 
 namespace quarrel {
@@ -111,14 +112,15 @@ int Acceptor::DoHandleMsg(PaxosRequest req) {
 std::shared_ptr<PaxosMsg> Acceptor::HandlePrepareReq(const Proposal& pp) {
   auto pinst = pp.plid_;
   auto entry = pp.pentry_;
+  std::shared_ptr<PaxosMsg> rsp;
 
   auto& ent = pmn_->GetEntry(pinst, entry);
 
-  std::shared_ptr<PaxosMsg> rsp;
   const auto& existed_pp = ent.GetProposal();
   const auto& existed_promise = ent.GetPromised();
 
   auto vsize = 0;
+  bool promised = true;
   const Proposal* from_pp = NULL;
 
   if (existed_pp) {
@@ -131,15 +133,87 @@ std::shared_ptr<PaxosMsg> Acceptor::HandlePrepareReq(const Proposal& pp) {
       from_pp = existed_promise.get();
   } else {
       // a new proposal request
-      vsize = pp.size_;
       from_pp = &pp;
+      vsize = pp.size_;
+      auto ret = pmn_->SetPromised(pp);
+      if (ret != kErrCode_OK) {
+          vsize = 0;
+          promised = false;
+      }
   }
 
   auto ret = AllocProposalMsg(vsize);
   auto rpp = GetProposalFromMsg(ret.get());
 
-  *rpp = *from_pp;
-  return NULL;
+  ret->type_ = kMsgType_PREPARE_RSP;
+  memcpy(rpp, from_pp, ProposalHeaderSz + vsize);
+
+  if (promised) {
+    rpp->status_ = kPaxosState_PROMISED;
+  } else {
+    rpp->status_ = kPaxosState_PROMISED_FAILED;
+  }
+
+  return std::move(ret);
+}
+
+std::shared_ptr<PaxosMsg> Acceptor::HandleAcceptReq(const Proposal& pp) {
+  auto pinst = pp.plid_;
+  auto entry = pp.pentry_;
+  std::shared_ptr<PaxosMsg> rsp;
+
+  auto& ent = pmn_->GetEntry(pinst, entry);
+
+  bool accepted = false;
+  auto accepted_pp = &pp;
+
+  const auto& existed_pp = ent.GetProposal();
+  const auto& existed_promise = ent.GetPromised();
+
+  if (existed_pp) {
+    // sequence of events:
+    // A prepare p1 to C
+    // C reponse with a promise.
+    // B prepare p2 to C
+    // C response with a promise
+    // B send accept to C
+    // A send accept to C
+    auto status = existed_pp->status_;
+    if (status != kPaxosState_CHOSEN && status != kPaxosState_ACCEPTED) {
+      LOG_ERR << "invalid status of accepted proposal found, (pinst, entry):("
+              << pinst << "," << entry << "), status:" << status;
+    }
+    accepted = false;
+    accepted_pp = existed_pp.get();
+  } else if (existed_promise) {
+    if (existed_promise->pid_ <= pp.pid_) {
+      // in case of #0 proposal optimization.
+      // existed promise id is very likely to less than accepted id.
+      // in which case non-master proposer proposes before master.
+      if (pmn_->SetAccepted(pp) == kErrCode_OK) {
+        accepted = true;
+      }
+    }
+  }
+
+  auto ret = AllocProposalMsg(0);
+  auto rpp = GetProposalFromMsg(ret.get());
+
+  memcpy(rpp, accepted_pp, ProposalHeaderSz);
+
+  rpp->size_ = 0;
+  ret->type_ = kMsgType_ACCEPT_RSP;
+
+  if (accepted) {
+      rpp->status_ = kPaxosState_ACCEPTED;
+  } else {
+      rpp->status_ = kPaxosState_ACCEPTED_FAILED;
+  }
+
+  // clear promised
+  pmn_->ClearPromised(pinst, entry);
+
+  return ret;
 }
 
 }  // namespace quarrel

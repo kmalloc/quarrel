@@ -29,7 +29,6 @@ struct DummyLocalConn: public LocalConn {
                 auto rspfp = GetProposalFromMsg(fake_rsp_.get());
                 rspfp->pid_ = reqfp->pid_ - addr_.id_;
                 rspfp->value_id_ = reqfp->value_id_ + 1;
-
                 rsp = std::move(fake_rsp_);
             }
 
@@ -41,16 +40,20 @@ struct DummyLocalConn: public LocalConn {
               pp->pid_ = pp2->pid_ + 1;
             }
 
-            data.cb_(std::move(rsp));
+            auto rspfp = GetProposalFromMsg(rsp.get());
 
             if (req2->type_ == kMsgType_PREPARE_REQ) {
                 promised_ = req2;
+                rspfp->status_ = kPaxosState_PROMISED;
             } else if (req2->type_ == kMsgType_ACCEPT_REQ) {
                 accepted_ = req2;
+                rspfp->status_ = kPaxosState_ACCEPTED;
             } else if (req2->type_ == kMsgType_CHOSEN_REQ) {
                 chosen_ = true;
+                rspfp->status_ = kPaxosState_CHOSEN;
             }
 
+            data.cb_(std::move(rsp));
             return 0;
         }
 
@@ -103,27 +106,30 @@ struct DummyRemoteConn: public RemoteConn {
                 rsp = std::move(fake_rsp_);
           }
 
+          auto rpp = GetProposalFromMsg(rsp.get());
           if ((rejectAccept_ && req2->type_ == kMsgType_ACCEPT_REQ) ||
               (rejectPrepare_ && req2->type_ == kMsgType_PREPARE_REQ)) {
 
             LOG_ERR << "reject from remote";
 
-            auto pp = GetProposalFromMsg(rsp.get());
             auto pp2 = GetProposalFromMsg(req2.get());
-            pp->pid_ = pp2->pid_ + 1;
+            rpp->pid_ = pp2->pid_ + 1;
+            //rpp->status_ = kPaxosState_PROMISED_FAILED;
           }
-
-          std::async(std::launch::async, rsper, std::move(rsp));
-
-          LOG_INFO << "dummy call to DoWrite()";
 
           if (req2->type_ == kMsgType_PREPARE_REQ) {
             promised_ = req2;
+            rpp->status_ = kPaxosState_PROMISED;
           } else if (req2->type_ == kMsgType_ACCEPT_REQ) {
             accepted_ = req2;
+            rpp->status_ = kPaxosState_ACCEPTED;
           } else if (req2->type_ == kMsgType_CHOSEN_REQ) {
             chosen_ = true;
+            rpp->status_ = kPaxosState_CHOSEN;
           }
+
+          LOG_INFO << "dummy call to DoWrite()";
+          std::async(std::launch::async, rsper, std::move(rsp));
           return kErrCode_OK;
         }
 

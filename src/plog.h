@@ -128,6 +128,13 @@ class EntryMng {
     return SaveEntry(pinst_, entry, ent);
   }
 
+  int ClearPromised(uint64_t pinst, uint64_t entry) {
+    (void)pinst;
+    Entry& ent = GetEntry(entry);
+    ent.SetPromise(NULL);
+    return SaveEntry(pinst_, entry, ent);
+  }
+
   int SetAccepted(const Proposal& p) {
     auto entry = p.pentry_;
     auto pc = CloneProposal(p);
@@ -211,6 +218,23 @@ class PlogMng {
   Entry& GetEntry(uint64_t pinst, uint64_t entry) {
     pinst = pinst % entries_.size();
     return entries_[pinst]->GetEntry(entry);
+  }
+
+  int SetPromised(const Proposal& p) {
+      auto pinst = p.plid_;
+      pinst = pinst % entries_.size();
+      return entries_[pinst]->SetPromised(p);
+  }
+
+  int ClearPromised(uint64_t pinst, uint64_t entry) {
+      pinst = pinst % entries_.size();
+      return entries_[pinst]->ClearPromised(pinst, entry);
+  }
+
+  int SetAccepted(const Proposal& p) {
+      auto pinst = p.plid_;
+      pinst = pinst % entries_.size();
+      return entries_[pinst]->SetAccepted(p);
   }
 
   uint64_t GetMaxCommittedEntry(uint64_t pinst) {
