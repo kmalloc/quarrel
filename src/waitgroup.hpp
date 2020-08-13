@@ -56,6 +56,6 @@ class WaitGroup {
   std::condition_variable condition_;
 };
 
-} // namespace quarrel
+}  // namespace quarrel
 
 #endif

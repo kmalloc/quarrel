@@ -181,4 +181,4 @@ class LockFreeQueue {
 
 } __attribute__((aligned(64)));
 
-}
+}  // namespace quarrel
