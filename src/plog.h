@@ -208,6 +208,11 @@ class PlogMng {
     return 0;
   }
 
+  Entry& GetEntry(uint64_t pinst, uint64_t entry) {
+    pinst = pinst % entries_.size();
+    return entries_[pinst]->GetEntry(entry);
+  }
+
   uint64_t GetMaxCommittedEntry(uint64_t pinst) {
     pinst = pinst % entries_.size();
     return entries_[pinst]->GetMaxCommittedEntry(pinst);

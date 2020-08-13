@@ -106,9 +106,21 @@ std::shared_ptr<PaxosMsg> Acceptor::HandlePrepareReq(const Proposal& pp) {
   auto pinst = pp.plid_;
   auto entry = pp.pentry_;
   auto status = pp.status_;
+
+  auto& ent = pmn_->GetEntry(pinst, entry);
+
+  auto& existed_pp = ent.GetProposal();
+  auto& existed_promise = ent.GetPromised();
+
+  if (existed_pp) {
+      // largest last vote
+  } else if (existed_promise && existed_promise->pid_ >= pp.pid_) {
+      // reject for previous promise
+  } else {
+      // a new proposal request
+  }
+
   // TODO
-  (void)pinst;
-  (void)entry;
   (void)status;
   return NULL;
 }
