@@ -77,7 +77,7 @@ class RemoteConn : public Conn {
 
   virtual ~RemoteConn() {}
 
-  // customized point: implementation needed here
+  // customization point: implementation needed here
   // WARNING: this function may be called from multiple threads.
   // make sure it is thread safe.
   virtual int DoWrite(std::shared_ptr<PaxosMsg> msg) = 0;
@@ -96,9 +96,11 @@ class RemoteConn : public Conn {
   // HandleRecv handle msg received from the connected acceptor.
   virtual int HandleRecv(std::shared_ptr<PaxosMsg> req) {
     auto rd = reqToRemote_.GetPtr(req->reqid_);
+
     auto noop = [this](std::shared_ptr<PaxosMsg> m) {
       return DoWrite(std::move(m));
     };
+
     if (!rd) {
       return onReq_(std::move(req), noop);
     }
