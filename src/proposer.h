@@ -38,8 +38,7 @@ class Proposer {
   int Propose(uint64_t opaque, const std::string& val, uint64_t paxos_inst = 0);
 
   // TODO, one prepare for mulitple consecutive entry slots
-  int ProposeBatch(uint64_t opaque, const std::vector<std::string>& vals,
-                   uint64_t pinst);
+  int ProposeBatch(uint64_t opaque, const std::vector<std::string>& vals, uint64_t pinst);
 
  private:
   int doAccept(std::shared_ptr<PaxosMsg>& p);

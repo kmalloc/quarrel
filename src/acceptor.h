@@ -52,12 +52,12 @@ class Acceptor {
   Acceptor(const Acceptor&) = delete;
   Acceptor& operator=(const Acceptor&) = delete;
 
-  std::shared_ptr<PaxosMsg> HandleAcceptReq(const Proposal& proposal);
-  std::shared_ptr<PaxosMsg> HandlePrepareReq(const Proposal& proposal);
-  std::shared_ptr<PaxosMsg> HandleChosenReq(const Proposal& proposal);
+  std::shared_ptr<PaxosMsg> handleAcceptReq(const Proposal& proposal);
+  std::shared_ptr<PaxosMsg> handlePrepareReq(const Proposal& proposal);
+  std::shared_ptr<PaxosMsg> handleChosenReq(const Proposal& proposal);
 
-  int WorkerProc(int workerid);
-  int DoHandleMsg(PaxosRequest req);
+  int workerProc(int workerid);
+  int doHandleMsg(PaxosRequest req);
 
  private:
   uint64_t term_;  // logical time

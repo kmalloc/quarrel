@@ -24,7 +24,7 @@ int Acceptor::StartWorker() {
     auto wd = std::unique_ptr<WorkerData>(new WorkerData);
     wd->wg_.Reset(1);
     wd->mq_.Init(config_->worker_msg_queue_sz_);
-    wd->th_ = std::thread(&Acceptor::WorkerProc, this, i);
+    wd->th_ = std::thread(&Acceptor::workerProc, this, i);
     workers_.push_back(std::move(wd));
   }
 
@@ -61,7 +61,7 @@ int Acceptor::AddMsg(std::shared_ptr<PaxosMsg> msg, ResponseCallback cb) {
   return kErrCode_OK;
 }
 
-int Acceptor::WorkerProc(int workerid) {
+int Acceptor::workerProc(int workerid) {
   using QueueType = LockFreeQueue<PaxosRequest>;
   std::unique_ptr<WorkerData>& queue = workers_[workerid];
 
@@ -72,27 +72,27 @@ int Acceptor::WorkerProc(int workerid) {
       continue;
     }
 
-    DoHandleMsg(std::move(req));
+    doHandleMsg(std::move(req));
     queue->pending_.fetch_sub(1);
   }
 
   return 0;
 }
 
-int Acceptor::DoHandleMsg(PaxosRequest req) {
+int Acceptor::doHandleMsg(PaxosRequest req) {
   auto pp = GetProposalFromMsg(req.msg_.get());
   auto mtype = req.msg_->type_;
 
   std::shared_ptr<PaxosMsg> rsp;
 
   if (mtype == kMsgType_PREPARE_REQ) {
-    rsp = HandlePrepareReq(*pp);
+    rsp = handlePrepareReq(*pp);
     rsp->type_ = kMsgType_PREPARE_RSP;
   } else if (mtype == kMsgType_ACCEPT_REQ) {
-    rsp = HandleAcceptReq(*pp);
+    rsp = handleAcceptReq(*pp);
     rsp->type_ = kMsgType_ACCEPT_RSP;
   } else if (mtype == kMsgType_CHOSEN_REQ) {
-    rsp = HandleChosenReq(*pp);
+    rsp = handleChosenReq(*pp);
     rsp->type_ = kMsgType_CHOSEN_RSP;
   } else {
     rsp = std::make_shared<PaxosMsg>();
@@ -115,7 +115,7 @@ int Acceptor::DoHandleMsg(PaxosRequest req) {
   return kErrCode_OK;
 }
 
-std::shared_ptr<PaxosMsg> Acceptor::HandlePrepareReq(const Proposal& pp) {
+std::shared_ptr<PaxosMsg> Acceptor::handlePrepareReq(const Proposal& pp) {
   auto pinst = pp.plid_;
   auto entry = pp.pentry_;
   std::shared_ptr<PaxosMsg> rsp;
@@ -159,7 +159,7 @@ std::shared_ptr<PaxosMsg> Acceptor::HandlePrepareReq(const Proposal& pp) {
   return std::move(ret);
 }
 
-std::shared_ptr<PaxosMsg> Acceptor::HandleAcceptReq(const Proposal& pp) {
+std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(const Proposal& pp) {
   auto pinst = pp.plid_;
   auto entry = pp.pentry_;
   std::shared_ptr<PaxosMsg> rsp;
@@ -211,9 +211,9 @@ std::shared_ptr<PaxosMsg> Acceptor::HandleAcceptReq(const Proposal& pp) {
   ret->type_ = kMsgType_ACCEPT_RSP;
 
   if (accepted) {
-      rpp->status_ = kPaxosState_ACCEPTED;
+    rpp->status_ = kPaxosState_ACCEPTED;
   } else {
-      rpp->status_ = kPaxosState_ACCEPTED_FAILED;
+    rpp->status_ = kPaxosState_ACCEPTED_FAILED;
   }
 
   // clear promised
@@ -222,7 +222,7 @@ std::shared_ptr<PaxosMsg> Acceptor::HandleAcceptReq(const Proposal& pp) {
   return ret;
 }
 
-std::shared_ptr<PaxosMsg> Acceptor::HandleChosenReq(const Proposal& pp) {
+std::shared_ptr<PaxosMsg> Acceptor::handleChosenReq(const Proposal& pp) {
   auto pinst = pp.plid_;
   auto entry = pp.pentry_;
 
