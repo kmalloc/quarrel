@@ -11,6 +11,7 @@ Acceptor::Acceptor(std::shared_ptr<Configure> config)
 Acceptor::~Acceptor() { StopWorker(); }
 
 int Acceptor::StartWorker() {
+  assert(pmn_);
   if (started_) return kErrCode_WORKER_ALREADY_STARTED;
 
   auto num = config_->acceptor_worker_count_;
