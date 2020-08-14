@@ -52,6 +52,7 @@ TEST(acceptor_test, test_acceptor_api) {
   config->local_id_ = 1;
   config->plog_inst_num_ = 5;
   config->total_acceptor_ = 3;
+  config->acceptor_worker_count_ = 2;
   config->peer_.push_back({2, ConnType_REMOTE, "aaaa:bb"});
   config->peer_.push_back({3, ConnType_REMOTE, "aaaa2:bb2"});
   std::shared_ptr<PlogMng> pmn = std::make_shared<PlogMng>(config);
@@ -64,4 +65,35 @@ TEST(acceptor_test, test_acceptor_api) {
 
   pmn->SetEntryMngCreator(entry_mng_creator);
   pmn->InitPlog();
+
+  Acceptor acceptor(config);
+
+  ASSERT_EQ(kErrCode_OK,acceptor.StartWorker());
+
+  auto m1 = AllocProposalMsg(11);
+  auto m2 = AllocProposalMsg(11);
+  auto tm = std::chrono::milliseconds(10);
+
+  // test notify
+  WaitGroup wg1(1), wg2(1);
+
+  auto blockop = [&](std::shared_ptr<PaxosMsg>) -> int { wg1.Notify(); std::this_thread::sleep_for(tm); return 0; };
+  auto noop = [&](std::shared_ptr<PaxosMsg>) -> int { wg2.Notify(); return 0; };
+
+  ASSERT_EQ(kErrCode_OK, acceptor.AddMsg(m1, blockop));
+  ASSERT_EQ(kErrCode_OK, acceptor.AddMsg(m2, noop));
+
+  auto start = std::chrono::steady_clock::now();
+  ASSERT_TRUE(wg1.Wait(3));
+  auto end = std::chrono::steady_clock::now();
+  auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+  ASSERT_LT(diff, 3);
+
+  start = std::chrono::steady_clock::now();
+  ASSERT_FALSE(wg2.Wait(4));
+  ASSERT_TRUE(wg2.Wait(8));
+  end = std::chrono::steady_clock::now();
+
+  diff = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+  ASSERT_GT(diff, 8);
 }
