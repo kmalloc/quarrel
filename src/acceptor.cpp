@@ -126,13 +126,14 @@ std::shared_ptr<PaxosMsg> Acceptor::HandlePrepareReq(const Proposal& pp) {
   const auto& existed_promise = ent.GetPromised();
 
   auto vsize = 0;
-  bool promised = true;
   const Proposal* from_pp = NULL;
+  int status = kPaxosState_PROMISED;
 
   if (existed_pp) {
       // largest last vote
       vsize = existed_pp->size_;
       from_pp = existed_pp.get();
+      status = kPaxosState_ACCEPTED;
   } else if (existed_promise && existed_promise->pid_ >= pp.pid_) {
       // reject for previous promise
       vsize = existed_promise->size_;
@@ -143,8 +144,8 @@ std::shared_ptr<PaxosMsg> Acceptor::HandlePrepareReq(const Proposal& pp) {
       vsize = pp.size_;
       auto ret = pmn_->SetPromised(pp);
       if (ret != kErrCode_OK) {
-          vsize = 0;
-          promised = false;
+        vsize = 0;
+        status = kPaxosState_PROMISED_FAILED;
       }
   }
 
@@ -153,12 +154,7 @@ std::shared_ptr<PaxosMsg> Acceptor::HandlePrepareReq(const Proposal& pp) {
 
   ret->type_ = kMsgType_PREPARE_RSP;
   memcpy(rpp, from_pp, ProposalHeaderSz + vsize);
-
-  if (promised) {
-    rpp->status_ = kPaxosState_PROMISED;
-  } else {
-    rpp->status_ = kPaxosState_PROMISED_FAILED;
-  }
+  rpp->status_ = status;
 
   return std::move(ret);
 }
@@ -177,20 +173,24 @@ std::shared_ptr<PaxosMsg> Acceptor::HandleAcceptReq(const Proposal& pp) {
   const auto& existed_promise = ent.GetPromised();
 
   if (existed_pp) {
-    // sequence of events:
+    // case 1:
     // A prepare p1 to C
     // C reponse with a promise.
     // B prepare p2 to C
     // C response with a promise
     // B send accept to C
     // A send accept to C
+    // case 2: proposer proposes to an entry which already accepted a proposal
     auto status = existed_pp->status_;
     if (status != kPaxosState_CHOSEN && status != kPaxosState_ACCEPTED) {
       LOG_ERR << "invalid status of accepted proposal found, (pinst, entry):("
               << pinst << "," << entry << "), status:" << status;
     }
-    accepted = false;
+
     accepted_pp = existed_pp.get();
+    if (existed_pp->pid_ == pp.pid_ || existed_pp->value_id_ == pp.value_id_) {
+      accepted = true;
+    }
   } else if (existed_promise) {
     if (existed_promise->pid_ <= pp.pid_) {
       // in case of #0 proposal optimization.

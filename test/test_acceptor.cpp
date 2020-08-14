@@ -19,6 +19,13 @@ struct DummyEntryMng : public EntryMng {
     (void)pinst;
     (void)entry;
     (void)ent;
+
+    const auto& pp = ent.GetPromised();
+    if (pp) {
+        if (pp->size_ && memcmp(pp->data_, "writefail", 9) == 0) {
+            return kErrCode_WRITE_PLOG_FAIL;
+        }
+    }
     return kErrCode_OK;
   }
   virtual int LoadEntry(uint64_t pinst, uint64_t entry, Entry& ent) {
@@ -111,6 +118,7 @@ TEST(acceptor_test, test_acceptor_api) {
 
   LOG_INFO << "test return value from acceptor";
 
+  p1->proposer_ = 2;
   p1->status_ = kPaxosState_PREPARED;
   p2->status_ = kPaxosState_PREPARED;
 
@@ -122,6 +130,7 @@ TEST(acceptor_test, test_acceptor_api) {
     return 0;
   };
 
+  p1->pid_ = 23;
   acceptor.AddMsg(m1, verify);
   ASSERT_TRUE(wg1.Wait(10));
 
@@ -129,5 +138,39 @@ TEST(acceptor_test, test_acceptor_api) {
   auto rp = GetProposalFromMsg(ret.get());
   ASSERT_EQ(kPaxosState_PROMISED, rp->status_);
 
+  ret.reset();
+  // get last promised from acceptor
+  p1->pid_ = 22;
+  p1->proposer_ = 3;
+  acceptor.AddMsg(m1, verify);
+  ASSERT_TRUE(wg1.Wait(10));
+  rp = GetProposalFromMsg(ret.get());
+  ASSERT_EQ(kPaxosState_PROMISED, rp->status_);
+  ASSERT_EQ(23, rp->pid_);
+  ASSERT_EQ(2, rp->proposer_);
+
+  ret.reset();
+  // overwrite existed promise
+  p1->pid_ = 24;
+  p1->proposer_ = 3;
+  acceptor.AddMsg(m1, verify);
+  ASSERT_TRUE(wg1.Wait(10));
+  rp = GetProposalFromMsg(ret.get());
+  ASSERT_EQ(kPaxosState_PROMISED, rp->status_);
+  ASSERT_EQ(24, rp->pid_);
+  ASSERT_EQ(3, rp->proposer_);
+
+  // test failure to write plog to disk
+  ret.reset();
+  p1->pid_ = 25;
+  memcpy(p1->data_, "writefail", 9);
+  acceptor.AddMsg(m1, verify);
+  ASSERT_TRUE(wg1.Wait(10));
+  rp = GetProposalFromMsg(ret.get());
+  ASSERT_EQ(kPaxosState_PROMISED_FAILED, rp->status_);
+  ASSERT_EQ(25, rp->pid_);
+  ASSERT_EQ(3, rp->proposer_);
+
+  // test accept new value
   // TODO
 }

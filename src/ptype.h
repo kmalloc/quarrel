@@ -47,6 +47,7 @@ namespace quarrel {
         kErrCode_WORKER_NOT_STARTED = 30010,
         kErrCode_WORKER_ALREADY_STARTED = 30011,
         kErrCode_PROPOSAL_NOT_EXIST = 30012,
+        kErrCode_WRITE_PLOG_FAIL = 30013,
     };
 
     constexpr int MAX_ACCEPTOR_NUM = 32;
