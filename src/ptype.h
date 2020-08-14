@@ -46,6 +46,7 @@ namespace quarrel {
         kErrCode_UNMARSHAL_PLOG_FAIL = 30009, // unmarshal plog fail
         kErrCode_WORKER_NOT_STARTED = 30010,
         kErrCode_WORKER_ALREADY_STARTED = 30011,
+        kErrCode_PROPOSAL_NOT_EXIST = 30012,
     };
 
     constexpr int MAX_ACCEPTOR_NUM = 32;

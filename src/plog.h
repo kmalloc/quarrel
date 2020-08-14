@@ -38,6 +38,15 @@ class Entry {
   const std::shared_ptr<Proposal>& GetProposal() const { return pp_; }
   const std::shared_ptr<Proposal>& GetPromised() const { return promised_; }
 
+  int Commit() {
+      if (!pp_) {
+          return kErrCode_PROPOSAL_NOT_EXIST;
+      }
+
+      pp_->status_ = kPaxosState_CHOSEN;
+      return kErrCode_OK;
+  }
+
   uint32_t SerializeTo(std::string& output) {
     Proposal dummy;
     memset(&dummy, 0xff, sizeof(dummy));
@@ -168,6 +177,14 @@ class EntryMng {
     return val;
   }
 
+  int CommitEntry(uint64_t entry) {
+      auto& ent = GetEntry(entry);
+      auto ret = ent.Commit();
+      if (ret != kErrCode_OK) return ret;
+
+      return SaveEntry(pinst_, entry, ent);
+  }
+
   uint64_t GenPrepareId(uint64_t entry) {
     Entry& ent = GetEntry(entry);
     return ent.GenPrepareId();
@@ -235,6 +252,11 @@ class PlogMng {
       auto pinst = p.plid_;
       pinst = pinst % entries_.size();
       return entries_[pinst]->SetAccepted(p);
+  }
+
+  int CommitEntry(uint64_t pinst, uint64_t entry) {
+      pinst = pinst % entries_.size();
+      return entries_[pinst]->CommitEntry(entry);
   }
 
   uint64_t GetMaxCommittedEntry(uint64_t pinst) {

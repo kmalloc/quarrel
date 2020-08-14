@@ -82,7 +82,7 @@ struct DummyRemoteConn: public RemoteConn {
                      << ") dummy call to HandleRecv(), type: " << msg->type_
                      << ",msg:(reqid-" << msg->reqid_ << ", opaque-"
                      << pp->opaque_ << ", vid-" << pp->value_id_
-                     << ", pid-" << pp->pid_ << ")";
+                     << ",vsz:" << pp->size_ << ", pid-" << pp->pid_ << ")";
           };
 
           auto req2 = CloneProposalMsg(*req.get());
@@ -100,10 +100,14 @@ struct DummyRemoteConn: public RemoteConn {
             rspfp->pid_ = reqfp->pid_ - addr_.id_;
             rspfp->value_id_ = reqfp->value_id_ + 1;
 
-            LOG_INFO << "set reqid for last vote rsp, req pid:" << reqfp->pid_
-                     << ", rsp pid:" << rspfp->pid_;
+            LOG_INFO << "last vote rsp, req pid:" << reqfp->pid_
+                     << ", rsp pid:" << rspfp->pid_
+                     << ", req vsz:" << reqfp->size_
+                     << ", rsp vsz:" << rspfp->size_
+                     << ", req vid:" << reqfp->value_id_
+                     << ", rsp vid:" << rspfp->value_id_;
 
-                rsp = std::move(fake_rsp_);
+            rsp = std::move(fake_rsp_);
           }
 
           auto rpp = GetProposalFromMsg(rsp.get());
@@ -297,10 +301,17 @@ TEST(proposer, doPropose) {
     ASSERT_EQ(0, memcmp(p31, p32, ProposalHeaderSz + p31->size_));
     ASSERT_EQ(0, memcmp(p31, p33, ProposalHeaderSz + p31->size_));
 
-    auto fake_rsp2 = CloneProposalMsg(*fake_rsp);
+    fake_rsp = AllocProposalMsg(12);
+    auto fake_rsp2 = AllocProposalMsg(12);
+    auto pp1 = reinterpret_cast<Proposal*>(fake_rsp->data_);
     auto pp2 = reinterpret_cast<Proposal*>(fake_rsp2->data_);
+    pp1->proposer_ = 2;
+    pp1->opaque_ = 0xbadf00d+23;
+    pp1->status_ = kPaxosState_PROMISED;
+    memcpy(pp1->data_, "miliao dummy", pp1->size_);
     pp2->proposer_ = 3;
     pp2->opaque_ = 0xbadf00d+43;
+    pp2->status_ = kPaxosState_PROMISED;
     strncpy(reinterpret_cast<char*>(pp2->data_), "mi1ia0 dummy", pp2->size_);
 
     dr1->fake_rsp_ = fake_rsp2;

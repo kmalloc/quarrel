@@ -101,6 +101,11 @@ int Acceptor::DoHandleMsg(PaxosRequest req) {
     rsp->type_ = kMsgType_INVALID_REQ;
   }
 
+  if (!rsp) {
+      // chosen req doesn't require a response.
+      return kErrCode_OK;
+  }
+
   rsp->from_ = config_->local_id_;
   rsp->version_ = req.msg_->version_;
   rsp->magic_ = req.msg_->magic_;
@@ -214,6 +219,32 @@ std::shared_ptr<PaxosMsg> Acceptor::HandleAcceptReq(const Proposal& pp) {
   pmn_->ClearPromised(pinst, entry);
 
   return ret;
+}
+
+std::shared_ptr<PaxosMsg> Acceptor::HandleChosenReq(const Proposal& pp) {
+  auto pinst = pp.plid_;
+  auto entry = pp.pentry_;
+
+  auto& ent = pmn_->GetEntry(pinst, entry);
+  const auto& existed_pp = ent.GetProposal();
+
+  if (!existed_pp || pp.pid_ != existed_pp->pid_ || pp.value_id_ != existed_pp->value_id_) {
+    LOG_ERR << "invalid chosen request, proposal has change, pinst:" << pinst
+            << ", entry:" << entry << ", req pid:" << pp.pid_
+            << ", local pid:" << (existed_pp ? existed_pp->pid_ : ~0)
+            << ", req vid:" << pp.value_id_
+            << ", local vid:" << (existed_pp ? existed_pp->value_id_ : ~0);
+    return NULL;
+  }
+
+  auto err = pmn_->CommitEntry(pinst, entry);
+  if (err != kErrCode_OK) {
+    LOG_ERR << "commit entry failed, pinst:" << pinst << ", entry:" << entry
+            << ", err:" << err << ", pid:" << pp.pid_
+            << ", vid:" << pp.value_id_;
+  }
+
+  return NULL;
 }
 
 }  // namespace quarrel

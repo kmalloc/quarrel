@@ -87,8 +87,11 @@ int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
   auto ret2 = doAccept(pm);
 
   if (ret2 == kErrCode_OK) {
+    uint32_t size = pp->size_;
     pm->type_ = kMsgType_CHOSEN_REQ;
     pp->status_ = kPaxosState_CHOSEN;
+    pp->size_ = 0; // chosen req doesn't need to have value
+    pm->size_ -= size;
     doChosen(pm);
   } else {
     ret = ret2;
@@ -188,7 +191,8 @@ int Proposer::doPrepare(std::shared_ptr<PaxosMsg>& pm) {
 
       LOG_INFO << "peer return last vote, from:" << m->from_
                << ", pid:" << rsp_proposal->pid_
-               << ", vid:" << rsp_proposal->value_id_;
+               << ", vid:" << rsp_proposal->value_id_
+               << ", vsize:" << rsp_proposal->size_;
 
       assert(rsp_proposal->size_ > 0);
 
@@ -208,7 +212,7 @@ int Proposer::doPrepare(std::shared_ptr<PaxosMsg>& pm) {
 
   if (valid_rsp >= majority) {
     if (last_voted) {
-      pm.swap(last_voted);
+      pm = std::move(last_voted);
       return kErrCode_PREPARE_PEER_VALUE;
     }
     return kErrCode_OK;
