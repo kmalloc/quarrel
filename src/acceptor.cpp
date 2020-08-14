@@ -35,6 +35,7 @@ int Acceptor::StartWorker() {
 int Acceptor::StopWorker() {
   run_ = 0;
   for (auto i = 0u; i < workers_.size(); i++) {
+    workers_[i]->wg_.Notify();
     workers_[i]->th_.join();
   }
   started_ = false;
