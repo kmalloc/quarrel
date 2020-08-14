@@ -67,11 +67,14 @@ TEST(acceptor_test, test_acceptor_api) {
   pmn->InitPlog();
 
   Acceptor acceptor(config);
+  acceptor.SetPlogMng(pmn);
 
   ASSERT_EQ(kErrCode_OK,acceptor.StartWorker());
 
   auto m1 = AllocProposalMsg(11);
   auto m2 = AllocProposalMsg(11);
+  auto p1 = GetProposalFromMsg(m1.get());
+  auto p2 = GetProposalFromMsg(m2.get());
   auto tm = std::chrono::milliseconds(10);
 
   // test notify
@@ -79,6 +82,15 @@ TEST(acceptor_test, test_acceptor_api) {
 
   auto blockop = [&](std::shared_ptr<PaxosMsg>) -> int { wg1.Notify(); std::this_thread::sleep_for(tm); return 0; };
   auto noop = [&](std::shared_ptr<PaxosMsg>) -> int { wg2.Notify(); return 0; };
+
+  m1->type_ = kMsgType_PREPARE_REQ;
+  m2->type_ = kMsgType_PREPARE_REQ;
+  p1->pid_ = 2;
+  p1->plid_ = 1;
+  p1->pentry_ = 3;
+  p2->pid_ = 1;
+  p2->plid_ = 1;
+  p2->pentry_ = 4;
 
   ASSERT_EQ(kErrCode_OK, acceptor.AddMsg(m1, blockop));
   ASSERT_EQ(kErrCode_OK, acceptor.AddMsg(m2, noop));
@@ -96,4 +108,26 @@ TEST(acceptor_test, test_acceptor_api) {
 
   diff = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
   ASSERT_GT(diff, 8);
+
+  LOG_INFO << "test return value from acceptor";
+
+  p1->status_ = kPaxosState_PREPARED;
+  p2->status_ = kPaxosState_PREPARED;
+
+  std::shared_ptr<PaxosMsg> ret;
+
+  auto verify = [&](std::shared_ptr<PaxosMsg> m) -> int {
+    ret = std::move(m);
+    wg1.Notify();
+    return 0;
+  };
+
+  acceptor.AddMsg(m1, verify);
+  ASSERT_TRUE(wg1.Wait(10));
+
+  ASSERT_TRUE(ret != NULL);
+  auto rp = GetProposalFromMsg(ret.get());
+  ASSERT_EQ(kPaxosState_PROMISED, rp->status_);
+
+  // TODO
 }
