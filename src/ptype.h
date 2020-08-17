@@ -51,6 +51,7 @@ namespace quarrel {
         kErrCode_PROPOSAL_NOT_EXIST = 30012,
         kErrCode_WRITE_PLOG_FAIL = 30013,
         kErrCode_INVALID_PROPOSAL_REQ = 30014,
+        kErrCode_DUPLICATE_PROPOSAL_REQ = 30015,
     };
 
     constexpr int MAX_ACCEPTOR_NUM = 32;

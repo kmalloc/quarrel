@@ -199,6 +199,7 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
       // duplicate accept req
       accepted = true;
       accepted_pp = existed_pp.get();
+      errcode = kErrCode_DUPLICATE_PROPOSAL_REQ;
     } else if (existed_pp->pid_ < pp.pid_) {
       if (status != kPaxosState_CHOSEN) {
         // renew accepted value
