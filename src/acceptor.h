@@ -20,12 +20,14 @@ struct PaxosRequest {
   std::shared_ptr<PaxosMsg> msg_;
 };
 
+// will be indexed by thread num, make sure it is 64 byte aligned, so that no
+// false sharing will not occur.
 struct WorkerData {
   WaitGroup wg_;
   std::thread th_;
   LockFreeQueue<PaxosRequest> mq_;
   std::atomic<uint64_t> pending_{0};
-};
+} __attribute__((__aligned__(64)));
 
 class Acceptor {
  public:
@@ -33,7 +35,7 @@ class Acceptor {
   ~Acceptor();
 
   // An acceptor maintains several worker threads,
-  // each thread waits on a msg queue designated to a plog instance,
+  // each thread waits on a msg queue designated to several plog instances,
   // thread count must <= plog instance count,
   // ensuring that each plog instance is mutated from one thread only.
   int StartWorker();
