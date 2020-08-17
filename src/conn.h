@@ -29,7 +29,7 @@ enum ConnType {
   ConnType_REMOTE = 2,
 };
 
-// conn is a connection abstraction to an acceptor.
+// Conn is a connection abstraction to an acceptor.
 // real connection can be created on top of tcp or udp or even in-process queue.
 class Conn {
  public:
@@ -66,7 +66,7 @@ class LocalConn : public Conn {
 
 // RemoteConn is a real network connection to a remote acceptor.
 // a default tcp based socket implementation is provided, usually this suits
-// most use cases. since network management differs a lot from framework to
+// most use cases. However network management differs a lot from framework to
 // framework user can wrap their own RemoteConn using tcp/udp/http/rpc/etc.
 class RemoteConn : public Conn {
  public:
@@ -117,6 +117,10 @@ class RemoteConn : public Conn {
   LruMap<uint64_t, RpcReqData> reqToRemote_;
 };
 
+// ConnCreator creates connection specified by AddrInfo, a default creator is
+// only capable of creating default local conn and default remote conn.
+// cumstomization is needed if user have different implementations of LocalConn
+// or RemoteConn.
 using ConnCreator = std::function<std::unique_ptr<Conn>(AddrInfo)>;
 
 class ConnMng {
