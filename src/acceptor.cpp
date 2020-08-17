@@ -262,13 +262,12 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
   ret->type_ = kMsgType_ACCEPT_RSP;
 
   if (accepted) {
+    // clear promised
+    pmn_->ClearPromised(pinst, entry);
     rpp->status_ = kPaxosState_ACCEPTED;
   } else {
     rpp->status_ = kPaxosState_ACCEPTED_FAILED;
   }
-
-  // clear promised
-  pmn_->ClearPromised(pinst, entry);
 
   return ret;
 }
