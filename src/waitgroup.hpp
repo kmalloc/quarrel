@@ -38,7 +38,10 @@ class WaitGroup {
 
   bool TryWait() {
     std::lock_guard<decltype(mutex_)> lock(mutex_);
-    return curr_ >= count_;
+    bool ret = (curr_ >= count_);
+    if (ret) curr_ = 0;
+
+    return ret;
   }
 
   void Reset(uint32_t count) {
