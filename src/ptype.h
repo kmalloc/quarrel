@@ -50,6 +50,7 @@ namespace quarrel {
         kErrCode_WORKER_ALREADY_STARTED = 30011,
         kErrCode_PROPOSAL_NOT_EXIST = 30012,
         kErrCode_WRITE_PLOG_FAIL = 30013,
+        kErrCode_INVALID_PROPOSAL_REQ = 30014,
     };
 
     constexpr int MAX_ACCEPTOR_NUM = 32;
@@ -77,6 +78,7 @@ namespace quarrel {
         uint32_t type_;
         uint32_t version_;
         uint32_t from_;
+        uint32_t errcode_;
         uint64_t reqid_; // rpc id
         uint8_t  data_[1]; // struct hack
     } __attribute__((packed, aligned(1)));

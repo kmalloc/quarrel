@@ -130,6 +130,8 @@ std::shared_ptr<PaxosMsg> Acceptor::handlePrepareReq(Proposal& pp) {
   const Proposal* from_pp = NULL;
   int status = kPaxosState_PROMISED;
 
+  uint32_t errcode = 0;
+
   if (existed_pp) {
       // largest last vote
       vsize = existed_pp->size_;
@@ -147,6 +149,7 @@ std::shared_ptr<PaxosMsg> Acceptor::handlePrepareReq(Proposal& pp) {
       auto ret = pmn_->SetPromised(pp);
       if (ret != kErrCode_OK) {
         vsize = 0;
+        errcode = kErrCode_WRITE_PLOG_FAIL;
         status = kPaxosState_PROMISED_FAILED;
       } else {
         pp.status_ = kPaxosState_PREPARED;
@@ -156,6 +159,7 @@ std::shared_ptr<PaxosMsg> Acceptor::handlePrepareReq(Proposal& pp) {
   auto ret = AllocProposalMsg(vsize);
   auto rpp = GetProposalFromMsg(ret.get());
 
+  ret->errcode_ = errcode;
   ret->type_ = kMsgType_PREPARE_RSP;
   memcpy(rpp, from_pp, ProposalHeaderSz + vsize);
   rpp->status_ = status;
@@ -173,6 +177,7 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
   bool accepted = false;
   auto accepted_pp = &pp;
 
+  uint32_t errcode = 0;
   const auto& existed_pp = ent.GetProposal();
   const auto& existed_promise = ent.GetPromised();
 
@@ -187,11 +192,10 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
     // case 2: proposer proposes to an entry which already accepted a proposal
     auto status = existed_pp->status_;
     if (status != kPaxosState_CHOSEN && status != kPaxosState_ACCEPTED) {
+      errcode = kErrCode_INVALID_PLOG_DATA;
       LOG_ERR << "invalid status of accepted proposal found, (pinst, entry):("
               << pinst << "," << entry << "), status:" << status;
-    }
-
-    if (existed_pp->pid_ == pp.pid_ && existed_pp->value_id_ == pp.value_id_) {
+    } else if (existed_pp->pid_ == pp.pid_ && existed_pp->value_id_ == pp.value_id_) {
       // duplicate accept req
       accepted = true;
       accepted_pp = existed_pp.get();
@@ -209,6 +213,7 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
           accepted = false;
           accepted_pp = existed_pp.get();
           pp.status_ = kPaxosState_PROMISED;
+          errcode = kErrCode_WRITE_PLOG_FAIL;
           LOG_ERR << "renew accepted value failed, pinst:" << pinst
                   << ", entry:" << entry << ", pid:" << pp.pid_;
         }
@@ -216,6 +221,7 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
         // try to update chosen value, deny it.
         accepted = false;
         accepted_pp = existed_pp.get();
+        errcode = kErrCode_INVALID_PROPOSAL_REQ;
         LOG_ERR << "renew chosen value is not allowed, pinst:" << pinst
                 << ", entry:" << entry << ", pid:" << pp.pid_;
       }
@@ -223,6 +229,7 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
         // delayed messages or invalid value id, deny it
         accepted = false;
         accepted_pp = existed_pp.get();
+        errcode = kErrCode_INVALID_PROPOSAL_REQ;
         LOG_ERR << "invalid accept request, pinst:" << pinst
                 << ", entry:" << entry << ", pid:" << pp.pid_
                 << ", value id:" << pp.value_id_
@@ -239,6 +246,7 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
         accepted = true;
       } else {
         pp.status_ = kPaxosState_PROMISED;
+        errcode = kErrCode_WRITE_PLOG_FAIL;
       }
     }
   }
@@ -249,6 +257,7 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
   memcpy(rpp, accepted_pp, ProposalHeaderSz);
 
   rpp->size_ = 0;
+  ret->errcode_ = errcode;
   ret->type_ = kMsgType_ACCEPT_RSP;
 
   if (accepted) {
@@ -279,6 +288,7 @@ std::shared_ptr<PaxosMsg> Acceptor::handleChosenReq(Proposal& pp) {
 
   if (!existed_pp || pp.pid_ != existed_pp->pid_ || pp.value_id_ != existed_pp->value_id_) {
     rpp->status_ = kPaxosState_INVALID_PROPOSAL;
+    ret->errcode_ = kErrCode_INVALID_PROPOSAL_REQ;
     LOG_ERR << "invalid chosen request, proposal has change, pinst:" << pinst
             << ", entry:" << entry << ", req pid:" << pp.pid_
             << ", local pid:" << (existed_pp ? existed_pp->pid_ : ~0)
@@ -296,6 +306,7 @@ std::shared_ptr<PaxosMsg> Acceptor::handleChosenReq(Proposal& pp) {
   auto err = pmn_->CommitEntry(pinst, entry);
 
   if (err != kErrCode_OK) {
+    ret->errcode_ = kErrCode_WRITE_PLOG_FAIL;
     rpp->status_ = kPaxosState_COMMIT_FAILED;
     existed_pp->status_ = kPaxosState_ACCEPTED;
     LOG_ERR << "commit entry failed, pinst:" << pinst << ", entry:" << entry
