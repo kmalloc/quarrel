@@ -42,7 +42,7 @@ class Conn {
   const AddrInfo& GetAddr() const { return addr_; }
 
   // DoRpcRequest performs an *ASYNCHRONOUS* rpc reqeust to the connected
-  // acceptor. user must provide a callback for storing the corresponding
+  // acceptor. user must provide a callback to handle the corresponding
   // response.
   virtual int DoRpcRequest(RpcReqData req) = 0;
 
