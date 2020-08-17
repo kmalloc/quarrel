@@ -54,9 +54,9 @@ class Acceptor {
   Acceptor(const Acceptor&) = delete;
   Acceptor& operator=(const Acceptor&) = delete;
 
-  std::shared_ptr<PaxosMsg> handleAcceptReq(const Proposal& proposal);
-  std::shared_ptr<PaxosMsg> handlePrepareReq(const Proposal& proposal);
-  std::shared_ptr<PaxosMsg> handleChosenReq(const Proposal& proposal);
+  std::shared_ptr<PaxosMsg> handleAcceptReq(Proposal& proposal);
+  std::shared_ptr<PaxosMsg> handlePrepareReq(Proposal& proposal);
+  std::shared_ptr<PaxosMsg> handleChosenReq(Proposal& proposal);
 
   int workerProc(int workerid);
   int doHandleMsg(PaxosRequest req);

@@ -33,6 +33,14 @@ struct DummyEntryMng : public EntryMng {
             return kErrCode_WRITE_PLOG_FAIL;
         }
     }
+
+    if (pp2 && pp2->status_ == kPaxosState_CHOSEN) {
+        if (pp2->size_ && memcmp(pp2->data_, "miliao", 6) == 0) {
+            LOG_ERR << "dummy save chosen failed";
+            return kErrCode_WRITE_PLOG_FAIL;
+        }
+    }
+
     return kErrCode_OK;
   }
   virtual int LoadEntry(uint64_t pinst, uint64_t entry, Entry& ent) {
@@ -199,24 +207,24 @@ TEST(acceptor_test, test_acceptor_api) {
 
   // test write to entry which already have accepted value
   ret.reset();
-  p1->value_id_++;
-  m1->type_ = kMsgType_ACCEPT_REQ;
-  p1->status_ = kPaxosState_PROMISED;
-  acceptor.AddMsg(m1, verify);
-  ASSERT_TRUE(wg1.Wait(10));
-  rp = GetProposalFromMsg(ret.get());
-  ASSERT_EQ(kPaxosState_ACCEPTED, rp->status_);
-  ASSERT_EQ(26, rp->pid_);
-
-  ret.reset();
   p1->pid_++;
   m1->type_ = kMsgType_ACCEPT_REQ;
   p1->status_ = kPaxosState_PROMISED;
   acceptor.AddMsg(m1, verify);
   ASSERT_TRUE(wg1.Wait(10));
   rp = GetProposalFromMsg(ret.get());
+  ASSERT_EQ(kPaxosState_ACCEPTED, rp->status_);
+  ASSERT_EQ(27, rp->pid_);
+
+  ret.reset();
+  p1->value_id_++;
+  m1->type_ = kMsgType_ACCEPT_REQ;
+  p1->status_ = kPaxosState_PROMISED;
+  acceptor.AddMsg(m1, verify);
+  ASSERT_TRUE(wg1.Wait(10));
+  rp = GetProposalFromMsg(ret.get());
   ASSERT_EQ(kPaxosState_ACCEPTED_FAILED, rp->status_);
-  ASSERT_EQ(26, rp->pid_);
+  ASSERT_EQ(27, rp->pid_);
 
   ret.reset();
   p1->value_id_--;
@@ -226,7 +234,7 @@ TEST(acceptor_test, test_acceptor_api) {
   ASSERT_TRUE(wg1.Wait(10));
   rp = GetProposalFromMsg(ret.get());
   ASSERT_EQ(kPaxosState_ACCEPTED, rp->status_);
-  ASSERT_EQ(26, rp->pid_);
+  ASSERT_EQ(27, rp->pid_);
 
   // test propose to entry which already accepted value
   ret.reset();
@@ -238,7 +246,7 @@ TEST(acceptor_test, test_acceptor_api) {
   ASSERT_TRUE(wg1.Wait(10));
   rp = GetProposalFromMsg(ret.get());
   ASSERT_EQ(kPaxosState_ACCEPTED, rp->status_);
-  ASSERT_EQ(26, rp->pid_);
+  ASSERT_EQ(27, rp->pid_);
   ASSERT_EQ(0, memcmp(rp->data_, "normal", 6));
 
   // test accept with a smaller promise
@@ -282,7 +290,7 @@ TEST(acceptor_test, test_acceptor_api) {
   ret.reset();
   p1->pid_ = 43; //for accept
   p1->pentry_ = 89;
-  memcpy(p1->data_, "writefail", 6);
+  memcpy(p1->data_, "writefail", 9);
   m1->type_ = kMsgType_ACCEPT_REQ;
   p1->status_ = kPaxosState_PROMISED;
   acceptor.AddMsg(m1, verify);
@@ -292,5 +300,79 @@ TEST(acceptor_test, test_acceptor_api) {
   ASSERT_EQ(43, rp->pid_);
 
   // test commit
+  // test invalid commit pp
+  ret.reset();
+  p1->pid_ = 33; //
+  p1->pentry_ = 118; // not existed entry
+  memcpy(p1->data_, "miliao", 6);
+  m1->type_ = kMsgType_CHOSEN_REQ;
+  p1->status_ = kPaxosState_ACCEPTED;
+  acceptor.AddMsg(m1, verify);
+  ASSERT_TRUE(wg1.Wait(10));
+  rp = GetProposalFromMsg(ret.get());
+  ASSERT_EQ(kPaxosState_INVALID_PROPOSAL, rp->status_);
+
+  p1->pid_ = 43; // pid not equal
+  p1->pentry_ = 88;
+  m1->type_ = kMsgType_CHOSEN_REQ;
+  p1->status_ = kPaxosState_ACCEPTED;
+  acceptor.AddMsg(m1, verify);
+  ASSERT_TRUE(wg1.Wait(10));
+  rp = GetProposalFromMsg(ret.get());
+  ASSERT_EQ(kPaxosState_INVALID_PROPOSAL, rp->status_);
+
+  p1->pid_ = 33;
+  p1->pentry_ = 88;
+  p1->value_id_++; // invalid value id
+  m1->type_ = kMsgType_CHOSEN_REQ;
+  p1->status_ = kPaxosState_ACCEPTED;
+  acceptor.AddMsg(m1, verify);
+  ASSERT_TRUE(wg1.Wait(10));
+  rp = GetProposalFromMsg(ret.get());
+  ASSERT_EQ(kPaxosState_INVALID_PROPOSAL, rp->status_);
+
+  // chosen write failed.
+  p1->pid_ = 33;
+  p1->pentry_ = 88;
+  p1->value_id_--;
+  m1->type_ = kMsgType_CHOSEN_REQ;
+  p1->status_ = kPaxosState_ACCEPTED;
+  acceptor.AddMsg(m1, verify);
+  ASSERT_TRUE(wg1.Wait(10));
+  rp = GetProposalFromMsg(ret.get());
+  ASSERT_EQ(kPaxosState_COMMIT_FAILED, rp->status_);
+
+  // chosen succ
+  p1->pid_ = 53; // bigger prepare id to change accepted value
+  p1->pentry_ = 88;
+  p1->size_ = 9;
+  memcpy(p1->data_, "normalval", 9);
+  m1->type_ = kMsgType_ACCEPT_REQ;
+  p1->status_ = kPaxosState_PROMISED;
+  acceptor.AddMsg(m1, verify);
+  ASSERT_TRUE(wg1.Wait(10));
+  rp = GetProposalFromMsg(ret.get());
+  ASSERT_EQ(kPaxosState_ACCEPTED, rp->status_);
+  ASSERT_EQ(53, rp->pid_);
+
+  // test chosen succ
+  p1->pid_ = 53;
+  p1->pentry_ = 88;
+  m1->type_ = kMsgType_CHOSEN_REQ;
+  p1->status_ = kPaxosState_ACCEPTED;
+  acceptor.AddMsg(m1, verify);
+  ASSERT_TRUE(wg1.Wait(10));
+  rp = GetProposalFromMsg(ret.get());
+  ASSERT_EQ(kPaxosState_CHOSEN, rp->status_);
+
+  p1->pid_ = 53;
+  p1->pentry_ = 88;
+  m1->type_ = kMsgType_CHOSEN_REQ;
+  p1->status_ = kPaxosState_ACCEPTED;
+  acceptor.AddMsg(m1, verify);
+  ASSERT_TRUE(wg1.Wait(10));
+  rp = GetProposalFromMsg(ret.get());
+  ASSERT_EQ(kPaxosState_ALREADY_CHOSEN, rp->status_);
+
   // TODO
 }

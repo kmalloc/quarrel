@@ -116,7 +116,7 @@ int Acceptor::doHandleMsg(PaxosRequest req) {
   return kErrCode_OK;
 }
 
-std::shared_ptr<PaxosMsg> Acceptor::handlePrepareReq(const Proposal& pp) {
+std::shared_ptr<PaxosMsg> Acceptor::handlePrepareReq(Proposal& pp) {
   auto pinst = pp.plid_;
   auto entry = pp.pentry_;
   std::shared_ptr<PaxosMsg> rsp;
@@ -143,10 +143,13 @@ std::shared_ptr<PaxosMsg> Acceptor::handlePrepareReq(const Proposal& pp) {
       // a new proposal request
       from_pp = &pp;
       vsize = pp.size_;
+      pp.status_ = kPaxosState_PROMISED;
       auto ret = pmn_->SetPromised(pp);
       if (ret != kErrCode_OK) {
         vsize = 0;
         status = kPaxosState_PROMISED_FAILED;
+      } else {
+        pp.status_ = kPaxosState_PREPARED;
       }
   }
 
@@ -160,7 +163,7 @@ std::shared_ptr<PaxosMsg> Acceptor::handlePrepareReq(const Proposal& pp) {
   return std::move(ret);
 }
 
-std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(const Proposal& pp) {
+std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
   auto pinst = pp.plid_;
   auto entry = pp.pentry_;
   std::shared_ptr<PaxosMsg> rsp;
@@ -188,17 +191,54 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(const Proposal& pp) {
               << pinst << "," << entry << "), status:" << status;
     }
 
-    accepted_pp = existed_pp.get();
-    if (existed_pp->pid_ == pp.pid_ || existed_pp->value_id_ == pp.value_id_) {
+    if (existed_pp->pid_ == pp.pid_ && existed_pp->value_id_ == pp.value_id_) {
+      // duplicate accept req
       accepted = true;
+      accepted_pp = existed_pp.get();
+    } else if (existed_pp->pid_ < pp.pid_) {
+      if (status != kPaxosState_CHOSEN) {
+        // renew accepted value
+        accepted_pp = &pp;
+        pp.status_ = kPaxosState_ACCEPTED;
+        if (pmn_->SetAccepted(pp) == kErrCode_OK) {
+          accepted = true;
+          LOG_ERR << "renew accepted value succ, pinst:" << pinst
+                  << ", entry:" << entry << ", pid:" << pp.pid_;
+        } else {
+          // maybe set another promise?
+          accepted = false;
+          accepted_pp = existed_pp.get();
+          pp.status_ = kPaxosState_PROMISED;
+          LOG_ERR << "renew accepted value failed, pinst:" << pinst
+                  << ", entry:" << entry << ", pid:" << pp.pid_;
+        }
+      } else {
+        // try to update chosen value, deny it.
+        accepted = false;
+        accepted_pp = existed_pp.get();
+        LOG_ERR << "renew chosen value is not allowed, pinst:" << pinst
+                << ", entry:" << entry << ", pid:" << pp.pid_;
+      }
+    } else {
+        // delayed messages or invalid value id, deny it
+        accepted = false;
+        accepted_pp = existed_pp.get();
+        LOG_ERR << "invalid accept request, pinst:" << pinst
+                << ", entry:" << entry << ", pid:" << pp.pid_
+                << ", value id:" << pp.value_id_
+                << ", existed pid:" << existed_pp->pid_
+                << ", existed valudid:" << existed_pp->value_id_;
     }
   } else if (existed_promise) {
     if (existed_promise->pid_ <= pp.pid_) {
       // in case of #0 proposal optimization.
       // existed promise id is very likely to less than accepted id.
       // in which case non-master proposer proposes before master.
+      pp.status_ = kPaxosState_ACCEPTED;
       if (pmn_->SetAccepted(pp) == kErrCode_OK) {
         accepted = true;
+      } else {
+        pp.status_ = kPaxosState_PROMISED;
       }
     }
   }
@@ -223,30 +263,47 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(const Proposal& pp) {
   return ret;
 }
 
-std::shared_ptr<PaxosMsg> Acceptor::handleChosenReq(const Proposal& pp) {
+std::shared_ptr<PaxosMsg> Acceptor::handleChosenReq(Proposal& pp) {
   auto pinst = pp.plid_;
   auto entry = pp.pentry_;
 
   auto& ent = pmn_->GetEntry(pinst, entry);
   const auto& existed_pp = ent.GetProposal();
 
+  auto ret = AllocProposalMsg(0);
+  auto rpp = GetProposalFromMsg(ret.get());
+
+  memcpy(rpp, &pp, ProposalHeaderSz);
+  rpp->size_ = 0;
+  rpp->status_ = kPaxosState_CHOSEN;
+
   if (!existed_pp || pp.pid_ != existed_pp->pid_ || pp.value_id_ != existed_pp->value_id_) {
+    rpp->status_ = kPaxosState_INVALID_PROPOSAL;
     LOG_ERR << "invalid chosen request, proposal has change, pinst:" << pinst
             << ", entry:" << entry << ", req pid:" << pp.pid_
             << ", local pid:" << (existed_pp ? existed_pp->pid_ : ~0)
             << ", req vid:" << pp.value_id_
             << ", local vid:" << (existed_pp ? existed_pp->value_id_ : ~0);
-    return NULL;
+    return ret;
   }
 
+  if (existed_pp->status_ == kPaxosState_CHOSEN) {
+    rpp->status_ = kPaxosState_ALREADY_CHOSEN;
+    return ret;
+  }
+
+  existed_pp->status_ = kPaxosState_CHOSEN;
   auto err = pmn_->CommitEntry(pinst, entry);
+
   if (err != kErrCode_OK) {
+    rpp->status_ = kPaxosState_COMMIT_FAILED;
+    existed_pp->status_ = kPaxosState_ACCEPTED;
     LOG_ERR << "commit entry failed, pinst:" << pinst << ", entry:" << entry
             << ", err:" << err << ", pid:" << pp.pid_
             << ", vid:" << pp.value_id_;
   }
 
-  return NULL;
+  return ret;
 }
 
 }  // namespace quarrel
