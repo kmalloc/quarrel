@@ -15,8 +15,13 @@ TESTOBJ = $(TEST:%.cpp=$(BUILD_DIR)/%.o)
 
 # Gcc/Clang will create these .d files containing dependencies.
 DEP = $(OBJ:%.o=%.d)
+TESTDEP = $(TESTOBJ:%.o=%.d)
 
 quarrellib=libqr.a
+
+# Include all .d files
+-include $(DEP)
+-include $(TESTDEP)
 
 # Actual target of the binary - depends on all .o files.
 qr: $(OBJ)
@@ -28,9 +33,6 @@ test: $(TESTOBJ)
 	mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -o quarreltest $^ -lpthread -lgtest -lgtest_main
 	./quarreltest
-
-# Include all .d files
--include $(DEP)
 
 # Build target for every single object file.
 # The potential dependency on header files is covered
