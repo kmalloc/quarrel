@@ -38,7 +38,7 @@ class Entry {
   const std::shared_ptr<Proposal>& GetProposal() const { return pp_; }
   const std::shared_ptr<Proposal>& GetPromised() const { return promised_; }
 
-  int Commit() {
+  int Choose() {
       if (!pp_) {
           return kErrCode_PROPOSAL_NOT_EXIST;
       }
@@ -86,8 +86,7 @@ class Entry {
     ig_.SetGreatThan(raw->prepare_id_);
 
     const Proposal* p1 = reinterpret_cast<const Proposal*>(raw->data);
-    const Proposal* p2 = reinterpret_cast<const Proposal*>(
-        raw->data + ProposalHeaderSz + p1->size_);
+    const Proposal* p2 = reinterpret_cast<const Proposal*>(raw->data + ProposalHeaderSz + p1->size_);
 
     if (p1->size_ + p2->size_ + 2 * ProposalHeaderSz !=
         from.size() - sizeof(EntryRaw) + 1) {
@@ -124,10 +123,12 @@ class EntryMng {
   virtual int Checkpoint(uint64_t pinst, uint64_t term) = 0;
   virtual int LoadEntry(uint64_t pinst, uint64_t entry, Entry&) = 0;
   virtual int SaveEntry(uint64_t pinst, uint64_t entry, const Entry&) = 0;
+  virtual int LoadUncommittedEntry(std::vector<std::unique_ptr<Entry>>& entries) = 0;
 
-  virtual uint64_t GetMaxCommittedEntry(uint64_t pinst) = 0;
-  virtual int LoadUncommittedEntry(
-      std::vector<std::unique_ptr<Entry>>& entries) = 0;
+  uint64_t GetMaxChosenEntry(uint64_t pinst) {
+    (void)pinst;
+    return local_max_chosen_entry_;
+  }
 
   int SetPromised(const Proposal& p) {
     auto entry = p.pentry_;
@@ -177,12 +178,16 @@ class EntryMng {
     return val;
   }
 
-  int CommitEntry(uint64_t entry) {
+  int ChooseEntry(uint64_t entry) {
       auto& ent = GetEntry(entry);
-      auto ret = ent.Commit();
+      auto ret = ent.Choose();
       if (ret != kErrCode_OK) return ret;
 
-      return SaveEntry(pinst_, entry, ent);
+      ret = SaveEntry(pinst_, entry, ent);
+      if (ret == kErrCode_OK && local_max_chosen_entry_ < entry) {
+        local_max_chosen_entry_ = entry;
+      }
+      return ret;
   }
 
   uint64_t GenPrepareId(uint64_t entry) {
@@ -207,9 +212,9 @@ class EntryMng {
   std::shared_ptr<Configure> config_;
 
   uint64_t pinst_;
-  uint64_t local_chosen_entry_;
-  uint64_t global_chosen_entry_;
-  uint64_t max_committed_entry_;
+  uint64_t first_unchosen_entry_{0};
+  uint64_t local_max_chosen_entry_{0};
+  uint64_t global_max_chosen_entry_{0};
 
   LruMap<uint64_t, std::unique_ptr<Entry>> entries_;
 };
@@ -254,14 +259,14 @@ class PlogMng {
       return entries_[pinst]->SetAccepted(p);
   }
 
-  int CommitEntry(uint64_t pinst, uint64_t entry) {
+  int ChooseEntry(uint64_t pinst, uint64_t entry) {
       pinst = pinst % entries_.size();
-      return entries_[pinst]->CommitEntry(entry);
+      return entries_[pinst]->ChooseEntry(entry);
   }
 
-  uint64_t GetMaxCommittedEntry(uint64_t pinst) {
+  uint64_t GetMaxChosenEntry(uint64_t pinst) {
     pinst = pinst % entries_.size();
-    return entries_[pinst]->GetMaxCommittedEntry(pinst);
+    return entries_[pinst]->GetMaxChosenEntry(pinst);
   }
 
   uint64_t GenValueId(uint64_t pinst, uint64_t entry, uint64_t pid) {

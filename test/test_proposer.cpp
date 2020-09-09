@@ -165,18 +165,11 @@ struct DummyEntryMng : public EntryMng {
     return kErrCode_OK;
   }
 
-  virtual uint64_t GetMaxCommittedEntry(uint64_t pinst) {
-    (void)pinst;
-    return max_committed_++ % 8;
-  }
-
   virtual int LoadUncommittedEntry(
       std::vector<std::unique_ptr<Entry>>& entries) {
     (void)entries;
     return kErrCode_OK;
   }
-
-  uint64_t max_committed_{0};
 };
 
 TEST(proposer, doPropose) {

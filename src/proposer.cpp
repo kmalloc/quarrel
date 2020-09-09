@@ -15,7 +15,7 @@ std::shared_ptr<PaxosMsg> Proposer::allocPaxosMsg(uint64_t pinst,
   auto pm = AllocProposalMsg(value_size);
   if (!pm) return NULL;
 
-  auto entry = pmn_->GetMaxCommittedEntry(pinst) + 1;
+  auto entry = pmn_->GetMaxChosenEntry(pinst) + 1;
   auto pid = pmn_->GenPrepareId(pinst, entry);
 
   // TODO, check local entry status to handle pending proposal, this might
@@ -44,6 +44,7 @@ int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
   assert(pmn_);
   assert(conn_);
 
+  // TODO catchup
   auto pm = allocPaxosMsg(pinst, opaque, uint32_t(val.size()));
   if (!pm) return kErrCode_OOM;
 

@@ -123,6 +123,9 @@ std::shared_ptr<PaxosMsg> Acceptor::handlePrepareReq(Proposal& pp) {
 
   auto& ent = pmn_->GetEntry(pinst, entry);
 
+  // TODO: check previous entry.
+  // and trigger a catchup if current acceptor lags behind
+
   const auto& existed_pp = ent.GetProposal();
   const auto& existed_promise = ent.GetPromised();
 
@@ -210,7 +213,7 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
           LOG_ERR << "renew accepted value succ, pinst:" << pinst
                   << ", entry:" << entry << ", pid:" << pp.pid_;
         } else {
-          // maybe set another promise?
+          // TODO: maybe set another promise?
           accepted = false;
           accepted_pp = existed_pp.get();
           pp.status_ = kPaxosState_PROMISED;
@@ -303,7 +306,7 @@ std::shared_ptr<PaxosMsg> Acceptor::handleChosenReq(Proposal& pp) {
   }
 
   existed_pp->status_ = kPaxosState_CHOSEN;
-  auto err = pmn_->CommitEntry(pinst, entry);
+  auto err = pmn_->ChooseEntry(pinst, entry);
 
   if (err != kErrCode_OK) {
     ret->errcode_ = kErrCode_WRITE_PLOG_FAIL;
