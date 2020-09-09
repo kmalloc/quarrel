@@ -127,7 +127,7 @@ class EntryMng {
 
   uint64_t GetMaxChosenEntry(uint64_t pinst) {
     (void)pinst;
-    return local_max_chosen_entry_;
+    return last_chosen_entry_;
   }
 
   int SetPromised(const Proposal& p) {
@@ -184,8 +184,8 @@ class EntryMng {
       if (ret != kErrCode_OK) return ret;
 
       ret = SaveEntry(pinst_, entry, ent);
-      if (ret == kErrCode_OK && local_max_chosen_entry_ < entry) {
-        local_max_chosen_entry_ = entry;
+      if (ret == kErrCode_OK && last_chosen_entry_ < entry) {
+        last_chosen_entry_ = entry;
       }
       return ret;
   }
@@ -212,8 +212,8 @@ class EntryMng {
   std::shared_ptr<Configure> config_;
 
   uint64_t pinst_;
+  uint64_t last_chosen_entry_{0};
   uint64_t first_unchosen_entry_{0};
-  uint64_t local_max_chosen_entry_{0};
   uint64_t global_max_chosen_entry_{0};
 
   LruMap<uint64_t, std::unique_ptr<Entry>> entries_;

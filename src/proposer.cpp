@@ -45,6 +45,7 @@ int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
   assert(conn_);
 
   // TODO catchup
+
   auto pm = allocPaxosMsg(pinst, opaque, uint32_t(val.size()));
   if (!pm) return kErrCode_OOM;
 
