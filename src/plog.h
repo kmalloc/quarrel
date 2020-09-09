@@ -14,8 +14,8 @@ namespace quarrel {
 struct EntryRaw {
   uint32_t size_;
   uint32_t version_;
-  uint64_t value_id_;
-  uint64_t prepare_id_;
+  uint64_t last_value_id_;
+  uint64_t last_prepare_id_;
   char data[1];  // proposal + promised
 } __attribute__((packed, aligned(1)));
 
@@ -62,8 +62,8 @@ class Entry {
     EntryRaw* raw = reinterpret_cast<EntryRaw*>(&output[0]);
     raw->version_ = 0x11;
     raw->size_ = total_sz;
-    raw->value_id_ = vig_.Get();
-    raw->prepare_id_ = ig_.Get();
+    raw->last_value_id_ = vig_.Get();
+    raw->last_prepare_id_ = ig_.Get();
 
     Proposal* p1 = pp_.get();
     if (p1 == NULL) p1 = &dummy;
@@ -82,8 +82,8 @@ class Entry {
     const EntryRaw* raw = reinterpret_cast<const EntryRaw*>(from.data());
     if (raw->size_ != from.size()) return kErrCode_INVALID_PLOG_DATA;
 
-    vig_.SetGreatThan(raw->value_id_);
-    ig_.SetGreatThan(raw->prepare_id_);
+    vig_.SetGreatThan(raw->last_value_id_);
+    ig_.SetGreatThan(raw->last_prepare_id_);
 
     const Proposal* p1 = reinterpret_cast<const Proposal*>(raw->data);
     const Proposal* p2 = reinterpret_cast<const Proposal*>(raw->data + ProposalHeaderSz + p1->size_);
