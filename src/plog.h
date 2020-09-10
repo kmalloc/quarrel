@@ -344,6 +344,7 @@ class PlogMng {
 
     if (max_in_used == ~0ull && local_max_chosen == ~0ull) return true;
 
+    // FIXME: how to handle a proposal that is failed to be accepted?
     if (max_in_used > local_max_chosen) return false;
 
     assert(max_in_used == local_max_chosen);
