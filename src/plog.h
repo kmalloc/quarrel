@@ -4,10 +4,12 @@
 #include "plog.h"
 #include "ptype.h"
 #include "config.h"
+#include "logger.h"
 #include "idgen.hpp"
 #include "lrumap.hpp"
 
 #include <vector>
+#include <assert.h>
 #include <string.h>
 
 namespace quarrel {
@@ -22,7 +24,7 @@ struct EntryRaw {
 class Entry {
  public:
   Entry(const Configure& config, uint64_t pinst, uint64_t entry)
-      : ig_(config.local_id_, config.total_acceptor_),
+      : ig_(config.local_id_ + config.pid_cookie_, config.total_acceptor_),
         vig_(0xff, 1),
         pinst_(pinst),
         entry_(entry) {}
@@ -125,36 +127,62 @@ class EntryMng {
   virtual int SaveEntry(uint64_t pinst, uint64_t entry, const Entry&) = 0;
   virtual int LoadUncommittedEntry(std::vector<std::unique_ptr<Entry>>& entries) = 0;
 
-  uint64_t GetMaxChosenEntry(uint64_t pinst) {
-    (void)pinst;
+  bool Recover() {
+      // FIXME
+      return true;
+  }
+
+  void Reset() {
+      last_chosen_entry_ = ~0ull;
+      max_in_used_entry_ = ~0ull;
+      first_unchosen_entry_ = ~0ull;
+      global_max_chosen_entry_ = ~0ull;
+  }
+
+  uint64_t GetNextEntry() const {
+      if (last_chosen_entry_ != ~0ull) return last_chosen_entry_ + 1;
+
+      return 0;
+  }
+
+  uint64_t GetMaxChosenEntry() const {
     return last_chosen_entry_;
   }
 
   int SetPromised(const Proposal& p) {
     auto entry = p.pentry_;
     auto pc = CloneProposal(p);
-    Entry& ent = GetEntry(entry);
+    Entry& ent = GetEntryAndCreateIfNotExist(entry);
     ent.SetPromise(std::move(pc));
     return SaveEntry(pinst_, entry, ent);
   }
 
   int ClearPromised(uint64_t pinst, uint64_t entry) {
     (void)pinst;
-    Entry& ent = GetEntry(entry);
-    ent.SetPromise(NULL);
-    return SaveEntry(pinst_, entry, ent);
+    auto ent = GetEntry(entry);
+    if (!ent) return kErrCode_PLOG_NOT_EXIST;
+
+    ent->SetPromise(NULL);
+    return SaveEntry(pinst_, entry, *ent);
   }
 
   int SetAccepted(const Proposal& p) {
     auto entry = p.pentry_;
     auto pc = CloneProposal(p);
-    Entry& ent = GetEntry(entry);
+    Entry& ent = GetEntryAndCreateIfNotExist(entry);
     ent.SetProposal(std::move(pc));
     return SaveEntry(pinst_, entry, ent);
   }
 
+  Entry* GetEntry(uint64_t entry) {
+    auto ret = entries_.GetPtr(entry);
+    if (ret == NULL) return NULL;
+
+    return ret->get();
+  }
+
   // create entry if it does not exist
-  Entry& GetEntry(uint64_t entry) {
+  Entry& GetEntryAndCreateIfNotExist(uint64_t entry) {
     auto ptr = entries_.GetPtr(entry);
     if (ptr == NULL) {
       return CreateEntry(entry);
@@ -172,49 +200,67 @@ class EntryMng {
     Entry& val = *ent;
     entries_.Put(entry, std::move(ent));
 
-    if (LoadEntry(pinst_, entry, val) != kErrCode_OK) {
+    if (max_in_used_entry_ == ~0ull || entry > max_in_used_entry_) {
+      max_in_used_entry_ = entry;
+      if (LoadEntry(pinst_, entry, val) != kErrCode_OK) {
+          LOG_ERR << "Load entry failed, instance:" << pinst_ << ", entry id:" << entry;
+      }
     }
 
     return val;
   }
 
-  int ChooseEntry(uint64_t entry) {
-      auto& ent = GetEntry(entry);
+  int SetChosen(uint64_t entry) {
+      auto& ent = GetEntryAndCreateIfNotExist(entry);
       auto ret = ent.Choose();
       if (ret != kErrCode_OK) return ret;
 
       ret = SaveEntry(pinst_, entry, ent);
-      if (ret == kErrCode_OK && last_chosen_entry_ < entry) {
-        last_chosen_entry_ = entry;
+      if (ret == kErrCode_OK) {
+        if (last_chosen_entry_ == ~0ull || last_chosen_entry_ < entry) {
+          last_chosen_entry_ = entry;
+        }
+        if (global_max_chosen_entry_ == ~0ull || global_max_chosen_entry_ < entry) {
+          global_max_chosen_entry_ = entry;
+        }
       }
+
       return ret;
   }
 
   uint64_t GenPrepareId(uint64_t entry) {
-    Entry& ent = GetEntry(entry);
+    Entry& ent = GetEntryAndCreateIfNotExist(entry);
     return ent.GenPrepareId();
   }
 
   uint64_t GenValueId(uint64_t entry, uint64_t pid) {
     (void)pid;  // eliminate warning
-    Entry& ent = GetEntry(entry);
+    Entry& ent = GetEntryAndCreateIfNotExist(entry);
     return ent.GenValueId();
   }
 
+  uint64_t GetMaxInUsedEnry() const { return max_in_used_entry_; }
+  uint64_t GetLastChosenEntry() const { return last_chosen_entry_; }
+  uint64_t GetFirstUnchosenEntry() const { return first_unchosen_entry_; }
+  uint64_t GetGlobalMaxChosenEntry() const { return global_max_chosen_entry_; }
+
+  void SetGlobalMaxChosenEntry(uint64_t entry) { global_max_chosen_entry_ = entry; }
+
   // return new value
   uint64_t SetPrepareIdGreaterThan(uint64_t entry, uint64_t val) {
-    Entry& ent = GetEntry(entry);
+    Entry& ent = GetEntryAndCreateIfNotExist(entry);
     return ent.SetPrepareIdGreaterThan(val);
   }
 
- private:
+ protected:
   std::string db_;
   std::shared_ptr<Configure> config_;
 
   uint64_t pinst_;
-  uint64_t last_chosen_entry_{0};
-  uint64_t first_unchosen_entry_{0};
-  uint64_t global_max_chosen_entry_{0};
+  uint64_t max_in_used_entry_{~0ull};
+  uint64_t last_chosen_entry_{~0ull};
+  uint64_t first_unchosen_entry_{~0ull};
+  uint64_t global_max_chosen_entry_{~0ull};
 
   LruMap<uint64_t, std::unique_ptr<Entry>> entries_;
 };
@@ -237,9 +283,9 @@ class PlogMng {
     return 0;
   }
 
-  Entry& GetEntry(uint64_t pinst, uint64_t entry) {
+  Entry& GetEntryAndCreateIfNotExist(uint64_t pinst, uint64_t entry) {
     pinst = pinst % entries_.size();
-    return entries_[pinst]->GetEntry(entry);
+    return entries_[pinst]->GetEntryAndCreateIfNotExist(entry);
   }
 
   int SetPromised(const Proposal& p) {
@@ -259,14 +305,19 @@ class PlogMng {
       return entries_[pinst]->SetAccepted(p);
   }
 
-  int ChooseEntry(uint64_t pinst, uint64_t entry) {
+  int SetChosen(uint64_t pinst, uint64_t entry) {
       pinst = pinst % entries_.size();
-      return entries_[pinst]->ChooseEntry(entry);
+      return entries_[pinst]->SetChosen(entry);
+  }
+
+  uint64_t GetNextEntry(uint64_t pinst) {
+    pinst = pinst % entries_.size();
+    return entries_[pinst]->GetNextEntry();
   }
 
   uint64_t GetMaxChosenEntry(uint64_t pinst) {
     pinst = pinst % entries_.size();
-    return entries_[pinst]->GetMaxChosenEntry(pinst);
+    return entries_[pinst]->GetMaxChosenEntry();
   }
 
   uint64_t GenValueId(uint64_t pinst, uint64_t entry, uint64_t pid) {
@@ -282,6 +333,24 @@ class PlogMng {
   uint64_t SetPrepareIdGreaterThan(uint64_t pinst, uint64_t entry, uint64_t v) {
     pinst = pinst % entries_.size();
     return entries_[pinst]->SetPrepareIdGreaterThan(entry, v);
+  }
+
+  bool IsEntryAfterMaxChosenAvailable(uint64_t pinst) {
+    pinst = pinst % entries_.size();
+
+    auto max_in_used = entries_[pinst]->GetMaxInUsedEnry();
+    auto local_max_chosen = entries_[pinst]->GetMaxChosenEntry();
+    auto global_max_chosen = entries_[pinst]->GetGlobalMaxChosenEntry();
+
+    if (max_in_used == ~0ull && local_max_chosen == ~0ull) return true;
+
+    if (max_in_used > local_max_chosen) return false;
+
+    assert(max_in_used == local_max_chosen);
+
+    if (local_max_chosen < global_max_chosen) return false;
+
+    return true;
   }
 
   void SetEntryMngCreator(EntryMngCreator creator) {

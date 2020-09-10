@@ -121,7 +121,7 @@ std::shared_ptr<PaxosMsg> Acceptor::handlePrepareReq(Proposal& pp) {
   auto entry = pp.pentry_;
   std::shared_ptr<PaxosMsg> rsp;
 
-  auto& ent = pmn_->GetEntry(pinst, entry);
+  auto& ent = pmn_->GetEntryAndCreateIfNotExist(pinst, entry);
 
   // TODO: check previous entry.
   // and trigger a catchup if current acceptor lags behind
@@ -175,7 +175,7 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
   auto entry = pp.pentry_;
   std::shared_ptr<PaxosMsg> rsp;
 
-  auto& ent = pmn_->GetEntry(pinst, entry);
+  auto& ent = pmn_->GetEntryAndCreateIfNotExist(pinst, entry);
 
   bool accepted = false;
   auto accepted_pp = &pp;
@@ -279,7 +279,7 @@ std::shared_ptr<PaxosMsg> Acceptor::handleChosenReq(Proposal& pp) {
   auto pinst = pp.plid_;
   auto entry = pp.pentry_;
 
-  auto& ent = pmn_->GetEntry(pinst, entry);
+  auto& ent = pmn_->GetEntryAndCreateIfNotExist(pinst, entry);
   const auto& existed_pp = ent.GetProposal();
 
   auto ret = AllocProposalMsg(0);
@@ -306,7 +306,7 @@ std::shared_ptr<PaxosMsg> Acceptor::handleChosenReq(Proposal& pp) {
   }
 
   existed_pp->status_ = kPaxosState_CHOSEN;
-  auto err = pmn_->ChooseEntry(pinst, entry);
+  auto err = pmn_->SetChosen(pinst, entry);
 
   if (err != kErrCode_OK) {
     ret->errcode_ = kErrCode_WRITE_PLOG_FAIL;

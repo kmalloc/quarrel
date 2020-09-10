@@ -14,6 +14,8 @@ namespace quarrel {
     struct Configure {
         uint32_t timeout_{0};  // timeout for propose operation.
         uint32_t local_id_{0}; // local paxos id
+        uint32_t pid_cookie_{0};
+
         uint32_t total_acceptor_{0};
         uint32_t acceptor_worker_count_{0};
         uint32_t worker_msg_queue_sz_{10000};

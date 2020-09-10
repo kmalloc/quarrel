@@ -13,7 +13,8 @@ using namespace quarrel;
 
 struct DummyLocalConn : public LocalConn {
  public:
-  DummyLocalConn(AddrInfo addr) : LocalConn(std::move(addr)) {}
+  DummyLocalConn(AddrInfo addr, std::shared_ptr<PlogMng> pmn)
+      : LocalConn(std::move(addr)), pmn_(std::move(pmn)) {}
 
   virtual int DoRpcRequest(RpcReqData data) {
     auto rsp = CloneProposalMsg(*data.data_.get());
@@ -27,6 +28,8 @@ struct DummyLocalConn : public LocalConn {
       fake_rsp_->type_ = kMsgType_PREPARE_RSP;
       auto reqfp = GetProposalFromMsg(req2.get());
       auto rspfp = GetProposalFromMsg(fake_rsp_.get());
+      rspfp->plid_ = reqfp->plid_;
+      rspfp->pentry_ = reqfp->pentry_;
       rspfp->pid_ = reqfp->pid_ - addr_.id_;
       rspfp->value_id_ = reqfp->value_id_ + 1;
       rsp = std::move(fake_rsp_);
@@ -45,12 +48,15 @@ struct DummyLocalConn : public LocalConn {
     if (req2->type_ == kMsgType_PREPARE_REQ) {
       promised_ = req2;
       rspfp->status_ = kPaxosState_PROMISED;
+      pmn_->SetPromised(*GetProposalFromMsg(promised_.get()));
     } else if (req2->type_ == kMsgType_ACCEPT_REQ) {
       accepted_ = req2;
       rspfp->status_ = kPaxosState_ACCEPTED;
+      pmn_->SetAccepted(*GetProposalFromMsg(accepted_.get()));
     } else if (req2->type_ == kMsgType_CHOSEN_REQ) {
       chosen_ = true;
       rspfp->status_ = kPaxosState_CHOSEN;
+      pmn_->SetChosen(rspfp->plid_, rspfp->pentry_);
     }
 
     data.cb_(std::move(rsp));
@@ -60,6 +66,8 @@ struct DummyLocalConn : public LocalConn {
   bool chosen_{false};
   bool rejectPrepare_{false};
   bool rejectAccept_{false};
+
+  std::shared_ptr<PlogMng> pmn_;
   std::shared_ptr<PaxosMsg> accepted_;
   std::shared_ptr<PaxosMsg> promised_;
   std::shared_ptr<PaxosMsg> fake_rsp_;
@@ -67,7 +75,9 @@ struct DummyLocalConn : public LocalConn {
 
 struct DummyRemoteConn : public RemoteConn {
  public:
-  DummyRemoteConn(AddrInfo addr) : RemoteConn(100, std::move(addr)) {}
+  DummyRemoteConn(AddrInfo addr, std::shared_ptr<PlogMng> pmn)
+      : RemoteConn(100, std::move(addr)), pmn_(std::move(pmn)) {}
+
   virtual ~DummyRemoteConn() {}
 
   virtual int DoWrite(std::shared_ptr<PaxosMsg> req) {
@@ -97,6 +107,9 @@ struct DummyRemoteConn : public RemoteConn {
       auto reqfp = GetProposalFromMsg(req2.get());
       auto rspfp = GetProposalFromMsg(fake_rsp_.get());
 
+      rspfp->plid_ = reqfp->plid_;
+      rspfp->pentry_ = reqfp->pentry_;
+
       rspfp->pid_ = reqfp->pid_ - addr_.id_;
       rspfp->value_id_ = reqfp->value_id_ + 1;
 
@@ -122,12 +135,15 @@ struct DummyRemoteConn : public RemoteConn {
     if (req2->type_ == kMsgType_PREPARE_REQ) {
       promised_ = req2;
       rpp->status_ = kPaxosState_PROMISED;
+      pmn_->SetPromised(*GetProposalFromMsg(promised_.get()));
     } else if (req2->type_ == kMsgType_ACCEPT_REQ) {
       accepted_ = req2;
       rpp->status_ = kPaxosState_ACCEPTED;
+      pmn_->SetAccepted(*GetProposalFromMsg(accepted_.get()));
     } else if (req2->type_ == kMsgType_CHOSEN_REQ) {
       chosen_ = true;
       rpp->status_ = kPaxosState_CHOSEN;
+      pmn_->SetChosen(rpp->plid_, rpp->pentry_);
     }
 
     LOG_INFO << "dummy call to DoWrite()";
@@ -138,13 +154,15 @@ struct DummyRemoteConn : public RemoteConn {
   bool chosen_{false};
   bool rejectPrepare_{false};
   bool rejectAccept_{false};
+
+  std::shared_ptr<PlogMng> pmn_;
   std::shared_ptr<PaxosMsg> accepted_;
   std::shared_ptr<PaxosMsg> promised_;
   std::shared_ptr<PaxosMsg> fake_rsp_;
 };
 
-struct DummyEntryMng : public EntryMng {
-  DummyEntryMng(std::shared_ptr<Configure> config, uint64_t pinst)
+struct DummyEntryMngForProposerTest : public EntryMng {
+  DummyEntryMngForProposerTest(std::shared_ptr<Configure> config, uint64_t pinst)
       : EntryMng(std::move(config), pinst) {}
 
   virtual int SaveEntry(uint64_t pinst, uint64_t entry, const Entry& ent) {
@@ -175,6 +193,7 @@ struct DummyEntryMng : public EntryMng {
 TEST(proposer, doPropose) {
   auto config = std::make_shared<Configure>();
   config->timeout_ = 8;  // 8ms
+  config->pid_cookie_ = 8; // prepare id > 8
   config->local_ = {1, ConnType_LOCAL, "xxxx:yyy"};
   config->local_id_ = 1;
   config->plog_inst_num_ = 5;
@@ -182,13 +201,16 @@ TEST(proposer, doPropose) {
   config->peer_.push_back({2, ConnType_REMOTE, "aaaa:bb"});
   config->peer_.push_back({3, ConnType_REMOTE, "aaaa2:bb2"});
 
-  auto conn_creator = [](AddrInfo addr) -> std::unique_ptr<Conn> {
+  Proposer pp(config);
+  std::shared_ptr<PlogMng> pmn = std::make_shared<PlogMng>(config);
+
+  auto conn_creator = [&](AddrInfo addr) -> std::unique_ptr<Conn> {
     if (addr.type_ == ConnType_LOCAL)
       return std::unique_ptr<DummyLocalConn>(
-          new DummyLocalConn(std::move(addr)));
+          new DummyLocalConn(std::move(addr), pmn));
 
     return std::unique_ptr<DummyRemoteConn>(
-        new DummyRemoteConn(std::move(addr)));
+        new DummyRemoteConn(std::move(addr), pmn));
   };
 
   auto conn_mng = std::make_shared<ConnMng>(config);
@@ -208,13 +230,10 @@ TEST(proposer, doPropose) {
   ASSERT_EQ(ConnType_REMOTE, r2->GetType());
   ASSERT_STREQ("aaaa2:bb2", r2->GetAddr().addr_.c_str());
 
-  Proposer pp(config);
-  std::shared_ptr<PlogMng> pmn = std::make_shared<PlogMng>(config);
-
   auto entry_mng_creator =
       [](int pinst,
          std::shared_ptr<Configure> conf) -> std::unique_ptr<EntryMng> {
-    return std::unique_ptr<EntryMng>(new DummyEntryMng(std::move(conf), pinst));
+    return std::unique_ptr<EntryMng>(new DummyEntryMngForProposerTest(std::move(conf), pinst));
   };
 
   pmn->SetEntryMngCreator(entry_mng_creator);
@@ -230,9 +249,11 @@ TEST(proposer, doPropose) {
   ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value"));
   ASSERT_EQ(config->local_id_, dr1->accepted_->from_);
   ASSERT_EQ(kMsgType_ACCEPT_REQ, dr1->accepted_->type_);
+
   auto p11 = reinterpret_cast<Proposal*>(dr1->accepted_->data_);
   auto p12 = reinterpret_cast<Proposal*>(dr2->accepted_->data_);
   auto p13 = reinterpret_cast<Proposal*>(dlocal->accepted_->data_);
+
   ASSERT_EQ(config->local_id_, p11->proposer_);
   ASSERT_EQ(kPaxosState_ACCEPTED, p11->status_);
   ASSERT_EQ(11, p11->size_);
@@ -247,9 +268,11 @@ TEST(proposer, doPropose) {
   ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value"));
   ASSERT_EQ(config->local_id_, dr1->accepted_->from_);
   ASSERT_EQ(kMsgType_ACCEPT_REQ, dr1->accepted_->type_);
+
   auto p21 = reinterpret_cast<Proposal*>(dr1->accepted_->data_);
   auto p22 = reinterpret_cast<Proposal*>(dr2->accepted_->data_);
   auto p23 = reinterpret_cast<Proposal*>(dlocal->accepted_->data_);
+
   ASSERT_EQ(config->local_id_, p21->proposer_);
   ASSERT_EQ(kPaxosState_ACCEPTED, p21->status_);
   ASSERT_EQ(11, p21->size_);
@@ -271,10 +294,6 @@ TEST(proposer, doPropose) {
 
   LOG_INFO << "#########last vote test##########";
 
-  for (auto i = 0; i < 16; i++) {
-    pmn->SetPrepareIdGreaterThan(0, i, 8);
-  }
-
   ASSERT_EQ(kErrCode_PREPARE_PEER_VALUE, pp.Propose(0xbadf00d, "dummy value"));
 
   ASSERT_EQ(1, dr1->accepted_->from_);
@@ -287,6 +306,7 @@ TEST(proposer, doPropose) {
   auto p31 = reinterpret_cast<Proposal*>(dr1->accepted_->data_);
   auto p32 = reinterpret_cast<Proposal*>(dr2->accepted_->data_);
   auto p33 = reinterpret_cast<Proposal*>(dlocal->accepted_->data_);
+
   ASSERT_EQ(2, p31->proposer_);
   ASSERT_EQ(2, p32->proposer_);
   ASSERT_EQ(2, p33->proposer_);
@@ -320,6 +340,7 @@ TEST(proposer, doPropose) {
   dr2->fake_rsp_ = fake_rsp;
 
   LOG_INFO << "@@@@@@test multiple last vote@@@@@";
+
   ASSERT_EQ(kErrCode_PREPARE_PEER_VALUE, pp.Propose(0xbadf00d, "dummy value"));
 
   auto p41 = reinterpret_cast<Proposal*>(dr1->accepted_->data_);
