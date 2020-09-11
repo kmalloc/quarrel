@@ -36,6 +36,7 @@ std::shared_ptr<PaxosMsg> Proposer::allocPaxosMsg(uint64_t pinst,
   pp->status_ = kPaxosState_PREPARED;
   pp->proposer_ = uint16_t(config_->local_id_);
   pp->value_id_ = pmn_->GenValueId(pinst, entry, pid);
+  pp->max_chosen_ = pmn_->GetMaxChosenEntry(pinst);
 
   return pm;
 }
@@ -91,6 +92,7 @@ int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
   pm->type_ = kMsgType_ACCEPT_REQ;
   pm->from_ = config_->local_id_;
   pp->status_ = kPaxosState_ACCEPTED;
+  pp->max_chosen_ = pmn_->GetMaxChosenEntry(pinst);
 
   auto ret2 = doAccept(pm);
 
@@ -186,6 +188,9 @@ int Proposer::doPrepare(std::shared_ptr<PaxosMsg>& pm) {
       continue;
     }
 
+    pmn_->SetGlobalMaxChosenEntry(rsp_proposal->plid_,
+                                  rsp_proposal->max_chosen_);
+
     if (rsp_proposal->pid_ > origin_proposal->pid_) {
       // rejected
       pmn_->SetPrepareIdGreaterThan(
@@ -198,7 +203,8 @@ int Proposer::doPrepare(std::shared_ptr<PaxosMsg>& pm) {
       // peer responses with last vote
 
       LOG_INFO << "peer return last vote, from:" << m->from_
-               << ", pid:" << rsp_proposal->pid_
+               << ", pinst@entry:" << rsp_proposal->plid_ << "@"
+               << rsp_proposal->pentry_ << ", pid:" << rsp_proposal->pid_
                << ", vid:" << rsp_proposal->value_id_
                << ", vsize:" << rsp_proposal->size_;
 
@@ -248,6 +254,9 @@ int Proposer::doAccept(std::shared_ptr<PaxosMsg>& pm) {
               << ", from:" << m->from_;
       continue;
     }
+
+    pmn_->SetGlobalMaxChosenEntry(rsp_proposal->plid_,
+                                  rsp_proposal->max_chosen_);
 
     if (rsp_proposal->status_ != kPaxosState_ACCEPTED) {
       LOG_ERR << "peer failed to accept, status:" << rsp_proposal->status_

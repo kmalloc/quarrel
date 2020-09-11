@@ -92,7 +92,7 @@ struct DummyRemoteConn : public RemoteConn {
                << ") dummy call to HandleRecv(), type: " << msg->type_
                << ",msg:(reqid-" << msg->reqid_ << ", opaque-" << pp->opaque_
                << ", vid-" << pp->value_id_ << ",vsz:" << pp->size_ << ", pid-"
-               << pp->pid_ << ")";
+               << pp->pid_ << ")@(" << pp->plid_ << ", " << pp->pentry_ << ")";
     };
 
     auto req2 = CloneProposalMsg(*req.get());

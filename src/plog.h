@@ -268,7 +268,14 @@ class EntryMng {
   uint64_t GetFirstUnchosenEntry() const { return first_unchosen_entry_; }
   uint64_t GetGlobalMaxChosenEntry() const { return global_max_chosen_entry_; }
 
-  void SetGlobalMaxChosenEntry(uint64_t entry) { global_max_chosen_entry_ = entry; }
+  void SetGlobalMaxChosenEntry(uint64_t entry) {
+    if (global_max_chosen_entry_ != ~0ull &&
+        global_max_chosen_entry_ >= entry) {
+      return;
+    }
+
+    global_max_chosen_entry_ = entry;
+  }
 
   // return new value
   uint64_t SetPrepareIdGreaterThan(uint64_t entry, uint64_t val) {
@@ -359,6 +366,11 @@ class PlogMng {
   uint64_t SetPrepareIdGreaterThan(uint64_t pinst, uint64_t entry, uint64_t v) {
     pinst = pinst % entries_.size();
     return entries_[pinst]->SetPrepareIdGreaterThan(entry, v);
+  }
+
+  void SetGlobalMaxChosenEntry(uint64_t pinst, uint64_t entry) {
+    pinst = pinst % entries_.size();
+    return entries_[pinst]->SetGlobalMaxChosenEntry(entry);
   }
 
   bool IsLocalChosenLagBehind(uint64_t pinst) {
