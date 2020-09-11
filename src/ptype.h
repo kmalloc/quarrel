@@ -36,23 +36,24 @@ namespace quarrel {
     };
 
     enum PaxosErrCode {
-        kErrCode_OK = 0,
-        kErrCode_OOM = 3001,
-        kErrCode_TIMEOUT= 3002,
-        kErrCode_PREPARE_NOT_QUORAUM = 3003,
-        kErrCode_ACCEPT_NOT_QUORAUM = 3004,
-        kErrCode_CONN_FAIL = 3005,
-        kErrCode_PLOG_NOT_EXIST = 3006,
-        kErrCode_PREPARE_PEER_VALUE = 3007, // prepare return peer's value
-        kErrCode_INVALID_PLOG_DATA = 30008, // invalid formated plog data
-        kErrCode_UNMARSHAL_PLOG_FAIL = 30009, // unmarshal plog fail
-        kErrCode_WORKER_NOT_STARTED = 30010,
-        kErrCode_WORKER_ALREADY_STARTED = 30011,
-        kErrCode_PROPOSAL_NOT_EXIST = 30012,
-        kErrCode_WRITE_PLOG_FAIL = 30013,
-        kErrCode_INVALID_PROPOSAL_REQ = 30014,
-        kErrCode_DUPLICATE_PROPOSAL_REQ = 30015,
-        kErrCode_NEED_CATCHUP = 30016,
+      kErrCode_OK = 0,
+      kErrCode_OOM = 3001,
+      kErrCode_TIMEOUT = 3002,
+      kErrCode_PREPARE_NOT_QUORAUM = 3003,
+      kErrCode_ACCEPT_NOT_QUORAUM = 3004,
+      kErrCode_CONN_FAIL = 3005,
+      kErrCode_PLOG_NOT_EXIST = 3006,
+      kErrCode_PREPARE_PEER_VALUE = 3007,    // prepare return peer's value
+      kErrCode_INVALID_PLOG_DATA = 30008,    // invalid formated plog data
+      kErrCode_UNMARSHAL_PLOG_FAIL = 30009,  // unmarshal plog fail
+      kErrCode_WORKER_NOT_STARTED = 30010,
+      kErrCode_WORKER_ALREADY_STARTED = 30011,
+      kErrCode_PROPOSAL_NOT_EXIST = 30012,
+      kErrCode_WRITE_PLOG_FAIL = 30013,
+      kErrCode_INVALID_PROPOSAL_REQ = 30014,
+      kErrCode_DUPLICATE_PROPOSAL_REQ = 30015,
+      kErrCode_NEED_CATCHUP = 30016,
+      kErrCode_ENTRY_NOT_EXIST = 30017,
     };
 
     constexpr int MAX_ACCEPTOR_NUM = 32;

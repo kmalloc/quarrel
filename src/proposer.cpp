@@ -15,7 +15,7 @@ std::shared_ptr<PaxosMsg> Proposer::allocPaxosMsg(uint64_t pinst,
   auto pm = AllocProposalMsg(value_size);
   if (!pm) return NULL;
 
-  auto entry = pmn_->GetNextEntry(pinst);
+  auto entry = pmn_->GetNextEntry(pinst, true);
   auto pid = pmn_->GenPrepareId(pinst, entry);
 
   // TODO, check local entry status to handle pending proposal, this might

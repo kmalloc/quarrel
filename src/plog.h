@@ -139,10 +139,17 @@ class EntryMng {
       global_max_chosen_entry_ = ~0ull;
   }
 
-  uint64_t GetNextEntry() const {
-      if (last_chosen_entry_ != ~0ull) return last_chosen_entry_ + 1;
+  uint64_t GetNextEntry(bool create) {
+    auto ret = 0ull;
+    if (last_chosen_entry_ != ~0ull) {
+      ret = last_chosen_entry_ + 1;
+    }
 
-      return 0;
+    if (create) {
+      CreateEntry(ret);
+    }
+
+    return ret;
   }
 
   uint64_t GetMaxChosenEntry() const {
@@ -152,9 +159,11 @@ class EntryMng {
   int SetPromised(const Proposal& p) {
     auto entry = p.pentry_;
     auto pc = CloneProposal(p);
-    Entry& ent = GetEntryAndCreateIfNotExist(entry);
-    ent.SetPromise(std::move(pc));
-    return SaveEntry(pinst_, entry, ent);
+    Entry* ent = GetEntry(entry);
+    if (!ent) return kErrCode_ENTRY_NOT_EXIST;
+
+    ent->SetPromise(std::move(pc));
+    return SaveEntry(pinst_, entry, *ent);
   }
 
   int ClearPromised(uint64_t pinst, uint64_t entry) {
@@ -169,16 +178,24 @@ class EntryMng {
   int SetAccepted(const Proposal& p) {
     auto entry = p.pentry_;
     auto pc = CloneProposal(p);
-    Entry& ent = GetEntryAndCreateIfNotExist(entry);
-    ent.SetProposal(std::move(pc));
-    return SaveEntry(pinst_, entry, ent);
+    Entry* ent = GetEntry(entry);
+    if (!ent) return kErrCode_ENTRY_NOT_EXIST;
+
+    ent->SetProposal(std::move(pc));
+    return SaveEntry(pinst_, entry, *ent);
   }
 
   Entry* GetEntry(uint64_t entry) {
     auto ret = entries_.GetPtr(entry);
-    if (ret == NULL) return NULL;
+    if (ret) return ret->get();
 
-    return ret->get();
+    auto ent = std::unique_ptr<Entry>(new Entry(*config_, pinst_, entry));
+
+    if (LoadEntry(pinst_, entry, *ent) != kErrCode_OK) return NULL;
+
+    auto ptr = ent.get();
+    entries_.Put(entry, std::move(ent));
+    return ptr;
   }
 
   // create entry if it does not exist
@@ -211,32 +228,39 @@ class EntryMng {
   }
 
   int SetChosen(uint64_t entry) {
-      auto& ent = GetEntryAndCreateIfNotExist(entry);
-      auto ret = ent.Choose();
-      if (ret != kErrCode_OK) return ret;
+    auto ent = GetEntry(entry);
+    if (!ent) return kErrCode_ENTRY_NOT_EXIST;
 
-      ret = SaveEntry(pinst_, entry, ent);
-      if (ret == kErrCode_OK) {
-        if (last_chosen_entry_ == ~0ull || last_chosen_entry_ < entry) {
-          last_chosen_entry_ = entry;
-        }
-        if (global_max_chosen_entry_ == ~0ull || global_max_chosen_entry_ < entry) {
-          global_max_chosen_entry_ = entry;
-        }
+    auto ret = ent->Choose();
+    if (ret != kErrCode_OK) return ret;
+
+    ret = SaveEntry(pinst_, entry, *ent);
+    if (ret == kErrCode_OK) {
+      if (last_chosen_entry_ == ~0ull || last_chosen_entry_ < entry) {
+        last_chosen_entry_ = entry;
+      }
+      if (global_max_chosen_entry_ == ~0ull ||
+          global_max_chosen_entry_ < entry) {
+        global_max_chosen_entry_ = entry;
+      }
       }
 
       return ret;
   }
 
   uint64_t GenPrepareId(uint64_t entry) {
-    Entry& ent = GetEntryAndCreateIfNotExist(entry);
-    return ent.GenPrepareId();
+    Entry* ent = GetEntry(entry);
+    if (!ent) return ~0ull;
+
+    return ent->GenPrepareId();
   }
 
   uint64_t GenValueId(uint64_t entry, uint64_t pid) {
     (void)pid;  // eliminate warning
-    Entry& ent = GetEntryAndCreateIfNotExist(entry);
-    return ent.GenValueId();
+    Entry* ent = GetEntry(entry);
+    if (!ent) return ~0ull;
+
+    return ent->GenValueId();
   }
 
   uint64_t GetMaxInUsedEnry() const { return max_in_used_entry_; }
@@ -248,8 +272,10 @@ class EntryMng {
 
   // return new value
   uint64_t SetPrepareIdGreaterThan(uint64_t entry, uint64_t val) {
-    Entry& ent = GetEntryAndCreateIfNotExist(entry);
-    return ent.SetPrepareIdGreaterThan(val);
+    Entry* ent = GetEntry(entry);
+    if (!ent) return ~0ull;
+
+    return ent->SetPrepareIdGreaterThan(val);
   }
 
  protected:
@@ -310,9 +336,9 @@ class PlogMng {
       return entries_[pinst]->SetChosen(entry);
   }
 
-  uint64_t GetNextEntry(uint64_t pinst) {
+  uint64_t GetNextEntry(uint64_t pinst, bool create) {
     pinst = pinst % entries_.size();
-    return entries_[pinst]->GetNextEntry();
+    return entries_[pinst]->GetNextEntry(create);
   }
 
   uint64_t GetMaxChosenEntry(uint64_t pinst) {
