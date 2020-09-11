@@ -361,23 +361,23 @@ class PlogMng {
     return entries_[pinst]->SetPrepareIdGreaterThan(entry, v);
   }
 
-  bool IsEntryAfterMaxChosenAvailable(uint64_t pinst) {
+  bool IsLocalChosenLagBehind(uint64_t pinst) {
     pinst = pinst % entries_.size();
 
     auto max_in_used = entries_[pinst]->GetMaxInUsedEnry();
     auto local_max_chosen = entries_[pinst]->GetMaxChosenEntry();
     auto global_max_chosen = entries_[pinst]->GetGlobalMaxChosenEntry();
 
-    if (max_in_used == ~0ull && local_max_chosen == ~0ull) return true;
+    if (max_in_used == ~0ull && local_max_chosen == ~0ull) return false;
 
     // FIXME: how to handle a proposal that is failed to be accepted?
     // if (max_in_used > local_max_chosen) return false;
 
     assert(max_in_used >= local_max_chosen);
 
-    if (local_max_chosen < global_max_chosen) return false;
+    if (local_max_chosen < global_max_chosen) return true;
 
-    return true;
+    return false;
   }
 
   void SetEntryMngCreator(EntryMngCreator creator) {

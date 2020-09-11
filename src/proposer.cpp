@@ -44,7 +44,7 @@ int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
   assert(pmn_);
   assert(conn_);
 
-  if (!pmn_->IsEntryAfterMaxChosenAvailable(pinst)) {
+  if (pmn_->IsLocalChosenLagBehind(pinst)) {
     // TODO catchup
     return kErrCode_NEED_CATCHUP;
   }
