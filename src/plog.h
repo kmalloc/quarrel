@@ -44,9 +44,7 @@ class Entry {
   uint64_t GenPrepareId() { return ig_.GetAndInc(); }
   void SetProposal(std::shared_ptr<Proposal> p) { pp_ = std::move(p); }
   void SetPromise(std::shared_ptr<Proposal> p) { promised_ = std::move(p); }
-  uint64_t SetPrepareIdGreaterThan(uint64_t val) {
-    return ig_.SetGreatThan(val);
-  }
+  uint64_t SetPrepareIdGreaterThan(uint64_t val) { return ig_.SetGreatThan(val); }
 
   const std::shared_ptr<Proposal>& GetProposal() const { return pp_; }
   const std::shared_ptr<Proposal>& GetPromised() const { return promised_; }
@@ -66,8 +64,7 @@ class Entry {
 
     auto proposal_sz = ProposalHeaderSz + (pp_ ? pp_->size_ : 1);
     auto promised_sz = ProposalHeaderSz + (promised_ ? promised_->size_ : 1);
-    auto total_sz =
-        static_cast<uint32_t>(sizeof(EntryRaw) - 1 + proposal_sz + promised_sz);
+    auto total_sz = static_cast<uint32_t>(sizeof(EntryRaw) - 1 + proposal_sz + promised_sz);
 
     output.clear();
     output.resize(total_sz);
@@ -101,8 +98,7 @@ class Entry {
     const Proposal* p1 = reinterpret_cast<const Proposal*>(raw->data);
     const Proposal* p2 = reinterpret_cast<const Proposal*>(raw->data + ProposalHeaderSz + p1->size_);
 
-    if (p1->size_ + p2->size_ + 2 * ProposalHeaderSz !=
-        from.size() - sizeof(EntryRaw) + 1) {
+    if (p1->size_ + p2->size_ + 2 * ProposalHeaderSz != from.size() - sizeof(EntryRaw) + 1) {
       return kErrCode_INVALID_PLOG_DATA;
     }
 
@@ -139,7 +135,9 @@ class EntryMng {
   virtual int SavePlogMetaInfo(const PlogMetaInfo& info) = 0;
   virtual int LoadPlogMetaInfo(uint64_t pinst, PlogMetaInfo& info) = 0;
 
-  virtual int LoadUnchosenEntry(uint64_t pinst, std::vector<std::unique_ptr<Entry>>& entries) = 0;
+  virtual int LoadUnchosenEntry(uint64_t pinst,
+                                std::vector<std::unique_ptr<Entry>>& entries) = 0;
+
   virtual int BatchLoadEntry(uint64_t pinst, uint64_t begin_entry,
                              uint64_t end_entry, std::vector<std::unique_ptr<Entry>>& entries) = 0;
 
@@ -176,7 +174,9 @@ class EntryMng {
     auto entry = p.pentry_;
     auto pc = CloneProposal(p);
     Entry* ent = GetEntry(entry);
-    if (!ent) return kErrCode_ENTRY_NOT_EXIST;
+    if (!ent) {
+      return kErrCode_ENTRY_NOT_EXIST;
+    }
 
     ent->SetPromise(std::move(pc));
     return SaveEntry(pinst_, entry, *ent);
