@@ -3,11 +3,11 @@ CXXFLAGS = -Wfatal-errors -Wall -Wextra -Wpedantic -Wconversion -Wshadow -std=c+
 # Put all auto generated stuff to this build dir.
 BUILD_DIR = ./build
 
-INCLUDE := -I /usr/local/include/gtest/ -I./src
+INCLUDE := -I /usr/local/include/gtest/ -I./core -I./network -I./util
 
 # List of all .cpp source files.
-CPP = $(wildcard src/*.cpp) #$(wildcard src/*.hpp)
-TEST = $(wildcard test/*.cpp) src/logger.cpp src/conn.cpp src/ptype.cpp src/proposer.cpp src/acceptor.cpp
+CPP = $(wildcard core/*.cpp) $(wildcard util/*.cpp) $(wildcard network/*.cpp)
+TEST = $(wildcard test/*.cpp) util/logger.cpp network/conn.cpp core/ptype.cpp core/proposer.cpp core/acceptor.cpp
 
 # All .o files go to build dir.
 OBJ = $(CPP:%.cpp=$(BUILD_DIR)/%.o)
@@ -44,6 +44,10 @@ $(BUILD_DIR)/%.o : %.cpp
 	$(CXX) $(CXXFLAGS) $(INCLUDE) -MMD -c $< -o $@
 
 .PHONY : clean
+
 clean :
 	# This should remove all generated files.
-	-rm $(BUILD_DIR)/**/*.o
+	-rm $(DEP)
+	-rm $(OBJ)
+	-rm $(TESTOBJ)
+	-rm $(TESTDEP)
