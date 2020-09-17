@@ -22,7 +22,7 @@ int Acceptor::StartWorker() {
   workers_.reserve(num);
 
   for (auto i = 0u; i < num; i++) {
-    auto wd = std::unique_ptr<WorkerData>(new WorkerData);
+    auto wd = make_unique<WorkerData>();
     wd->wg_.Reset(1);
     wd->mq_.Init(config_->worker_msg_queue_sz_);
     wd->th_ = std::thread(&Acceptor::workerProc, this, i);

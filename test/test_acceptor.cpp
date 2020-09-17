@@ -49,15 +49,30 @@ struct DummyEntryMng : public EntryMng {
     (void)ent;
     return kErrCode_OK;
   }
-  virtual int Checkpoint(uint64_t pinst, uint64_t term) {
+  virtual int LoadUnchosenEntry(uint64_t pinst, std::vector<std::unique_ptr<Entry>>& entries) {
     (void)pinst;
-    (void)term;
-    return kErrCode_OK;
-  }
-  virtual int LoadUncommittedEntry(
-      std::vector<std::unique_ptr<Entry>>& entries) {
     (void)entries;
     return kErrCode_OK;
+  }
+
+  virtual int SavePlogMetaInfo(const PlogMetaInfo& info) {
+    (void)info;
+    return 0;
+  }
+
+  virtual int LoadPlogMetaInfo(uint64_t pinst, PlogMetaInfo& info) {
+    (void)info;
+    (void)pinst;
+    return 0;
+  }
+
+  virtual int BatchLoadEntry(uint64_t pinst, uint64_t begin_entry,
+                             uint64_t end_entry, std::vector<std::unique_ptr<Entry>>& entries) {
+    (void)pinst;
+    (void)begin_entry;
+    (void)end_entry;
+    (void)entries;
+    return 0;
   }
 };
 
@@ -76,7 +91,7 @@ TEST(acceptor_test, test_acceptor_api) {
   auto entry_mng_creator =
       [](int pinst,
          std::shared_ptr<Configure> conf) -> std::unique_ptr<EntryMng> {
-    return std::unique_ptr<EntryMng>(new DummyEntryMng(std::move(conf), pinst));
+    return make_unique<DummyEntryMng>(std::move(conf), pinst);
   };
 
   pmn->SetEntryMngCreator(entry_mng_creator);

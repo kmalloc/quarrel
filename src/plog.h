@@ -5,6 +5,8 @@
 #include "ptype.h"
 #include "config.h"
 #include "logger.h"
+
+#include "stl.hpp"
 #include "idgen.hpp"
 #include "lrumap.hpp"
 
@@ -19,6 +21,15 @@ struct EntryRaw {
   uint64_t last_value_id_;
   uint64_t last_prepare_id_;
   char data[1];  // proposal + promised
+} __attribute__((packed, aligned(1)));
+
+struct PlogMetaInfo {
+  uint32_t type_;  // unused
+  uint32_t version_;
+  uint64_t pinst_;
+  uint64_t last_entry_;
+  uint64_t first_entry;
+  uint64_t last_apply_;
 } __attribute__((packed, aligned(1)));
 
 class Entry {
@@ -122,14 +133,19 @@ class EntryMng {
 
   virtual ~EntryMng() {}
 
-  virtual int Checkpoint(uint64_t pinst, uint64_t term) = 0;
   virtual int LoadEntry(uint64_t pinst, uint64_t entry, Entry&) = 0;
   virtual int SaveEntry(uint64_t pinst, uint64_t entry, const Entry&) = 0;
-  virtual int LoadUncommittedEntry(std::vector<std::unique_ptr<Entry>>& entries) = 0;
 
-  bool Recover() {
-      // FIXME
-      return true;
+  virtual int SavePlogMetaInfo(const PlogMetaInfo& info) = 0;
+  virtual int LoadPlogMetaInfo(uint64_t pinst, PlogMetaInfo& info) = 0;
+
+  virtual int LoadUnchosenEntry(uint64_t pinst, std::vector<std::unique_ptr<Entry>>& entries) = 0;
+  virtual int BatchLoadEntry(uint64_t pinst, uint64_t begin_entry,
+                             uint64_t end_entry, std::vector<std::unique_ptr<Entry>>& entries) = 0;
+
+  bool RecoverFromDisk() {
+    // FIXME
+    return true;
   }
 
   void Reset() {
@@ -189,7 +205,7 @@ class EntryMng {
     auto ret = entries_.GetPtr(entry);
     if (ret) return ret->get();
 
-    auto ent = std::unique_ptr<Entry>(new Entry(*config_, pinst_, entry));
+    auto ent = make_unique<Entry>(*config_, pinst_, entry);
 
     if (LoadEntry(pinst_, entry, *ent) != kErrCode_OK) return NULL;
 

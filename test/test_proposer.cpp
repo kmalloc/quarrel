@@ -177,16 +177,30 @@ struct DummyEntryMngForProposerTest : public EntryMng {
     (void)ent;
     return kErrCode_OK;
   }
-  virtual int Checkpoint(uint64_t pinst, uint64_t term) {
+  virtual int LoadUnchosenEntry(uint64_t pinst, std::vector<std::unique_ptr<Entry>>& entries) {
     (void)pinst;
-    (void)term;
+    (void)entries;
     return kErrCode_OK;
   }
 
-  virtual int LoadUncommittedEntry(
-      std::vector<std::unique_ptr<Entry>>& entries) {
+  virtual int SavePlogMetaInfo(const PlogMetaInfo& info) {
+    (void)info;
+    return 0;
+  }
+
+  virtual int LoadPlogMetaInfo(uint64_t pinst, PlogMetaInfo& info) {
+    (void)info;
+    (void)pinst;
+    return 0;
+  }
+
+  virtual int BatchLoadEntry(uint64_t pinst, uint64_t begin_entry,
+                             uint64_t end_entry, std::vector<std::unique_ptr<Entry>>& entries) {
+    (void)pinst;
+    (void)begin_entry;
+    (void)end_entry;
     (void)entries;
-    return kErrCode_OK;
+    return 0;
   }
 };
 
@@ -205,12 +219,11 @@ TEST(proposer, doPropose) {
   std::shared_ptr<PlogMng> pmn = std::make_shared<PlogMng>(config);
 
   auto conn_creator = [&](AddrInfo addr) -> std::unique_ptr<Conn> {
-    if (addr.type_ == ConnType_LOCAL)
-      return std::unique_ptr<DummyLocalConn>(
-          new DummyLocalConn(std::move(addr), pmn));
+    if (addr.type_ == ConnType_LOCAL) {
+      return make_unique<DummyLocalConn>(std::move(addr), pmn);
+    }
 
-    return std::unique_ptr<DummyRemoteConn>(
-        new DummyRemoteConn(std::move(addr), pmn));
+    return make_unique<DummyRemoteConn>(std::move(addr), pmn);
   };
 
   auto conn_mng = std::make_shared<ConnMng>(config);
@@ -231,9 +244,8 @@ TEST(proposer, doPropose) {
   ASSERT_STREQ("aaaa2:bb2", r2->GetAddr().addr_.c_str());
 
   auto entry_mng_creator =
-      [](int pinst,
-         std::shared_ptr<Configure> conf) -> std::unique_ptr<EntryMng> {
-    return std::unique_ptr<EntryMng>(new DummyEntryMngForProposerTest(std::move(conf), pinst));
+      [](int pinst, std::shared_ptr<Configure> conf) -> std::unique_ptr<EntryMng> {
+    return make_unique<DummyEntryMngForProposerTest>(std::move(conf), pinst);
   };
 
   pmn->SetEntryMngCreator(entry_mng_creator);
