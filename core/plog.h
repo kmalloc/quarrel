@@ -141,9 +141,10 @@ class EntryMng {
   virtual int BatchLoadEntry(uint64_t pinst, uint64_t begin_entry,
                              uint64_t end_entry, std::vector<std::unique_ptr<Entry>>& entries) = 0;
 
-  bool RecoverFromDisk() {
-    // FIXME
-    return true;
+  bool RecoverFromDisk(int count) {
+      // FIXME
+      (void)count;
+      return true;
   }
 
   void Reset() {
