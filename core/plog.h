@@ -23,13 +23,15 @@ struct EntryRaw {
   char data[1];  // proposal + promised
 } __attribute__((packed, aligned(1)));
 
+// saved to disk asynchronously
 struct PlogMetaInfo {
   uint32_t type_;  // unused
   uint32_t version_;
   uint64_t pinst_;
   uint64_t last_entry_;
-  uint64_t first_entry;
-  uint64_t last_apply_;
+  uint64_t first_entry_;
+  uint64_t last_apply_;  // not idempotent
+  uint64_t last_chosen_;
 } __attribute__((packed, aligned(1)));
 
 class Entry {
@@ -45,6 +47,14 @@ class Entry {
   void SetProposal(std::shared_ptr<Proposal> p) { pp_ = std::move(p); }
   void SetPromise(std::shared_ptr<Proposal> p) { promised_ = std::move(p); }
   uint64_t SetPrepareIdGreaterThan(uint64_t val) { return ig_.SetGreatThan(val); }
+
+  uint64_t EntryID() const { return entry_; }
+
+  uint64_t Status() const {
+    if (pp_) return pp_->status_;
+    if (promised_) promised_->status_;
+    return kPaxosState_INVALID_PROPOSAL;
+  }
 
   const std::shared_ptr<Proposal>& GetProposal() const { return pp_; }
   const std::shared_ptr<Proposal>& GetPromised() const { return promised_; }
@@ -135,14 +145,51 @@ class EntryMng {
   virtual int SavePlogMetaInfo(const PlogMetaInfo& info) = 0;
   virtual int LoadPlogMetaInfo(uint64_t pinst, PlogMetaInfo& info) = 0;
 
-  virtual int LoadUnchosenEntry(uint64_t pinst,
-                                std::vector<std::unique_ptr<Entry>>& entries) = 0;
+  // called peroidically to remove old log
+  //virtual int TrimPlog(uint64_t pinst, uint64_t begin_entry, uint64_t end_entry);
 
   virtual int BatchLoadEntry(uint64_t pinst, uint64_t begin_entry,
                              uint64_t end_entry, std::vector<std::unique_ptr<Entry>>& entries) = 0;
 
-  bool RecoverFromDisk() {
-    // FIXME
+  virtual bool RecoverFromDisk(int batch_num) {
+    PlogMetaInfo meta;
+    auto ret = LoadPlogMetaInfo(pinst_, meta);
+    if (ret != kErrCode_OK) {
+      LOG_ERR << "load metainfo failed for RecoverFromDisk, ret:" << ret;
+      return false;
+    }
+
+    last_chosen_entry_ = meta.last_chosen_;
+    std::vector<std::unique_ptr<Entry>> entries;
+
+    entries.reserve(batch_num);
+    for (auto i = meta.first_entry_; i < meta.last_entry_; i += batch_num) {
+      entries.clear();
+      ret = BatchLoadEntry(pinst_, i, i + batch_num, entries);
+      if (ret != kErrCode_OK) {
+        LOG_ERR << "entry batch load failed for RecoverFromDisk, ret:" << ret;
+        return false;
+      }
+
+      for (auto j = 0u; j < entries.size(); j++) {
+        auto entry_id = entries[j]->EntryID();
+        if (entries[j]->Status() == kPaxosState_CHOSEN) {
+          if (entry_id > last_chosen_entry_) {
+            last_chosen_entry_ = entry_id;
+          }
+        } else if (entry_id < first_unchosen_entry_) {
+          first_unchosen_entry_ = entry_id;
+        }
+
+        max_in_used_entry_ = entry_id;
+        entries_.Put(entry_id, std::move(entries[i]));
+      }
+    }
+
+    if (last_chosen_entry_ > global_max_chosen_entry_) {
+      global_max_chosen_entry_ = last_chosen_entry_;
+    }
+
     return true;
   }
 

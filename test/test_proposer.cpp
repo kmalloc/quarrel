@@ -177,11 +177,6 @@ struct DummyEntryMngForProposerTest : public EntryMng {
     (void)ent;
     return kErrCode_OK;
   }
-  virtual int LoadUnchosenEntry(uint64_t pinst, std::vector<std::unique_ptr<Entry>>& entries) {
-    (void)pinst;
-    (void)entries;
-    return kErrCode_OK;
-  }
 
   virtual int SavePlogMetaInfo(const PlogMetaInfo& info) {
     (void)info;
