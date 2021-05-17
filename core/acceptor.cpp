@@ -223,7 +223,7 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
                   << ", entry:" << entry << ", pid:" << pp.pid_;
         }
       } else {
-        // try to update chosen value, deny it.
+        // try to update chosen value, reject it.
         accepted = false;
         accepted_pp = existed_pp.get();
         errcode = kErrCode_INVALID_PROPOSAL_REQ;
@@ -231,15 +231,15 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
                 << ", entry:" << entry << ", pid:" << pp.pid_;
       }
     } else {
-        // delayed messages or invalid value id, deny it
-        accepted = false;
-        accepted_pp = existed_pp.get();
-        errcode = kErrCode_INVALID_PROPOSAL_REQ;
-        LOG_ERR << "invalid accept request, pinst:" << pinst
-                << ", entry:" << entry << ", pid:" << pp.pid_
-                << ", value id:" << pp.value_id_
-                << ", existed pid:" << existed_pp->pid_
-                << ", existed valudid:" << existed_pp->value_id_;
+      // delayed messages or invalid value id, reject it
+      accepted = false;
+      accepted_pp = existed_pp.get();
+      errcode = kErrCode_INVALID_PROPOSAL_REQ;
+      LOG_ERR << "invalid accept request, pinst:" << pinst
+              << ", entry:" << entry << ", pid:" << pp.pid_
+              << ", value id:" << pp.value_id_
+              << ", existed pid:" << existed_pp->pid_
+              << ", existed valudid:" << existed_pp->value_id_;
     }
   } else if (existed_promise) {
     if (existed_promise->pid_ <= pp.pid_) {

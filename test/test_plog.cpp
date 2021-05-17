@@ -37,13 +37,13 @@ TEST(quarrel_plog, test_entry_serialization) {
     p2->status_ = kPaxosState_ACCEPTED;
     strcpy(reinterpret_cast<char*>(p2->data_), "dummy data for p2");
 
-    ent.SetProposal(p1);
-    ent.SetPromise(p2);
+    ent.SetPromise(p1);
+    ent.SetProposal(p2);
 
     std::string to;
 
     Entry ent2(config, 44, 111);
-    ASSERT_EQ(ent.SerializeTo(to), p1->size_ + p2->size_ + sizeof(EntryRaw) - 1 + 2 * ProposalHeaderSz);
+    ASSERT_EQ(ent.SerializeTo(to), p2->size_ + sizeof(EntryRaw) + 2 * ProposalHeaderSz);
     ASSERT_EQ(kErrCode_OK, ent2.UnserializeFrom(to));
 
     ASSERT_EQ(ent.GenValueId(), ent2.GenValueId());
@@ -52,6 +52,7 @@ TEST(quarrel_plog, test_entry_serialization) {
     const auto& pp1 = ent2.GetProposal();
     const auto& pp2 = ent2.GetPromised();
 
-    ASSERT_EQ(0, memcmp(p1.get(), pp1.get(), ProposalHeaderSz+p1->size_));
-    ASSERT_EQ(0, memcmp(p2.get(), pp2.get(), ProposalHeaderSz+p2->size_));
+    auto dummy = GenDummyProposal();
+    ASSERT_EQ(0, memcmp(p2.get(), pp1.get(), ProposalHeaderSz + pp1->size_));
+    ASSERT_EQ(0, memcmp(&dummy, pp2.get(), ProposalHeaderSz + pp2->size_));
 }

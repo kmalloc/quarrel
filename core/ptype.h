@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <stdlib.h>
+#include <string.h>
 #include <functional>
 
 namespace quarrel {
@@ -94,6 +95,13 @@ namespace quarrel {
     std::shared_ptr<Proposal> AllocProposal(uint32_t value_size);
     std::shared_ptr<PaxosMsg> CloneProposalMsg(const PaxosMsg& pm);
     std::shared_ptr<PaxosMsg> AllocProposalMsg(uint32_t value_size);
+
+    inline Proposal GenDummyProposal() {
+      Proposal d;
+      memset(&d, 0, sizeof(d));
+      d.size_ = 1;
+      return d;
+    }
 
     inline Proposal* GetProposalFromMsg(PaxosMsg* pm) {
         return reinterpret_cast<Proposal*>(pm->data_);
