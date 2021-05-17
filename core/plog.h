@@ -31,9 +31,6 @@ struct PlogMetaInfo {
   uint32_t type_;  // unused
   uint32_t version_;
   uint64_t pinst_;
-  uint64_t last_entry_;
-  uint64_t first_entry_;
-  uint64_t last_chosen_;
   uint64_t last_committed_;  // not idempotent
 } __attribute__((packed, aligned(1)));
 
@@ -149,16 +146,19 @@ class EntryMng {
   virtual int LoadEntry(uint64_t pinst, uint64_t entry, Entry&) = 0;
   virtual int SaveEntry(uint64_t pinst, uint64_t entry, const Entry&) = 0;
 
-  virtual int SavePlogMetaInfo(const PlogMetaInfo& info) = 0;
+  virtual int SavePlogMetaInfo() = 0;
   virtual int LoadPlogMetaInfo(uint64_t pinst, PlogMetaInfo& info) = 0;
 
   // called peroidically to remove old log
   //virtual int TrimPlog(uint64_t pinst, uint64_t begin_entry, uint64_t end_entry);
 
+  // end_entry == ~0ull indicates to load all entry
   virtual int BatchLoadEntry(uint64_t pinst, uint64_t begin_entry,
                              uint64_t end_entry, std::vector<std::unique_ptr<Entry>>& entries) = 0;
 
-  virtual bool RecoverFromDisk(int batch_num) {
+  virtual bool LoadAllEntryFromDisk() {
+    // FIXME: ut for this function
+
     PlogMetaInfo meta;
     auto ret = LoadPlogMetaInfo(pinst_, meta);
     if (ret != kErrCode_OK) {
@@ -166,14 +166,21 @@ class EntryMng {
       return false;
     }
 
-    last_chosen_entry_ = meta.last_chosen_;
-    std::vector<std::unique_ptr<Entry>> entries;
+    max_in_used_entry_ = 0;
+    last_chosen_entry_ = 0;
+    max_committed_entry_ = meta.last_committed_;
+    max_continue_chosen_entry_ = meta.last_committed_;
 
-    entries.reserve(batch_num);
-    for (auto i = meta.first_entry_; i < meta.last_entry_; i += batch_num) {
+    uint64_t start_entry = 0;
+    std::vector<std::unique_ptr<Entry>> entries;
+    entries.reserve(10000);
+
+    while (1) {
       entries.clear();
-      ret = BatchLoadEntry(pinst_, i, i + batch_num, entries);
-      if (ret != kErrCode_OK) {
+      ret = BatchLoadEntry(pinst_, start_entry, ~0ull, entries);  // load all
+      if (ret == kErrCode_ENTRY_NOT_EXIST) {
+        break;
+      } else if (ret != kErrCode_OK) {
         LOG_ERR << "entry batch load failed for RecoverFromDisk, ret:" << ret;
         return false;
       }
@@ -184,12 +191,26 @@ class EntryMng {
           if (entry_id > last_chosen_entry_) {
             last_chosen_entry_ = entry_id;
           }
+          if (entry_id == max_continue_chosen_entry_ + 1) {
+            max_continue_chosen_entry_++;
+          }
         } else if (entry_id < first_unchosen_entry_) {
           first_unchosen_entry_ = entry_id;
         }
 
-        max_in_used_entry_ = entry_id;
-        entries_.Put(entry_id, std::move(entries[i]));
+        if (entry_id < first_valid_entry_) {
+          first_valid_entry_ = entry_id;
+        }
+
+        if (entry_id > max_in_used_entry_) {
+          max_in_used_entry_ = entry_id;
+        }
+
+        if (entry_id > start_entry) {
+          start_entry = entry_id + 1;
+        }
+
+        entries_.Put(entry_id, std::move(entries[j]));
       }
     }
 
@@ -201,10 +222,12 @@ class EntryMng {
   }
 
   void Reset() {
-      last_chosen_entry_ = ~0ull;
-      max_in_used_entry_ = ~0ull;
-      first_unchosen_entry_ = ~0ull;
-      global_max_chosen_entry_ = ~0ull;
+    first_valid_entry_ = ~0ull;
+    last_chosen_entry_ = ~0ull;
+    max_in_used_entry_ = ~0ull;
+    first_unchosen_entry_ = ~0ull;
+    max_continue_chosen_entry_ = 0;
+    global_max_chosen_entry_ = ~0ull;
   }
 
   uint64_t GetNextEntry(bool create) {
@@ -360,6 +383,9 @@ class EntryMng {
   std::shared_ptr<Configure> config_;
 
   uint64_t pinst_;
+  uint64_t max_committed_entry_{0};
+  uint64_t max_continue_chosen_entry_{0};
+  uint64_t first_valid_entry_{~0ull};  // ~0 indicates empty.
   uint64_t max_in_used_entry_{~0ull};
   uint64_t last_chosen_entry_{~0ull};
   uint64_t first_unchosen_entry_{~0ull};

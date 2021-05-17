@@ -50,8 +50,7 @@ struct DummyEntryMng : public EntryMng {
     return kErrCode_OK;
   }
 
-  virtual int SavePlogMetaInfo(const PlogMetaInfo& info) {
-    (void)info;
+  virtual int SavePlogMetaInfo() {
     return 0;
   }
 

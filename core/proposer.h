@@ -34,7 +34,7 @@ class Proposer {
   // propose a value
   // current implementation permits concurrent Propose() from different threads.
   // this is no harm at the cost of some performance overhead, which can be
-  // avoided by putting requests in a queue.
+  // avoided by putting requests in a queue, or acquire an instance-level lock for each propose.
   int Propose(uint64_t opaque, const std::string& val, uint64_t paxos_inst = 0);
 
   // TODO, one prepare for mulitple consecutive entry slots

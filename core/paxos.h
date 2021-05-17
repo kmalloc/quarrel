@@ -25,7 +25,10 @@ class Paxos {
   int Stop();
 
   // submit local chosen-proposal to db
-  int SubmitChosenProposal();
+  int SubmitChosenProposal(int inst);
+
+  // do catchup by qurying peers.
+  int CatchupFromPeers(int inst);
 
   // try to propose a new value.
   // empty value indicates a read probe, testing whether local is up to date.

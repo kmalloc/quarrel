@@ -18,9 +18,6 @@ std::shared_ptr<PaxosMsg> Proposer::allocPaxosMsg(uint64_t pinst,
   auto entry = pmn_->GetNextEntry(pinst, true);
   auto pid = pmn_->GenPrepareId(pinst, entry);
 
-  // TODO, check local entry status to handle pending proposal, this might
-  // improve performance a little bit
-
   pm->from_ = config_->local_id_;
   pm->type_ = kMsgType_PREPARE_REQ;
   pm->version_ = config_->msg_version_;
@@ -46,7 +43,8 @@ int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
   assert(conn_);
 
   if (pmn_->IsLocalChosenLagBehind(pinst)) {
-    // TODO catchup
+    // FIXME: catchup by entry from peers.
+    // or for better performance: range catchup from peers.
     return kErrCode_NEED_CATCHUP;
   }
 
