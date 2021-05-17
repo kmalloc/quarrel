@@ -25,7 +25,7 @@ class Paxos {
   int Stop();
 
   // submit local chosen-proposal to db
-  int SubmitPendingProposal();
+  int SubmitChosenProposal();
 
   // try to propose a new value.
   // empty value indicates a read probe, testing whether local is up to date.

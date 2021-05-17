@@ -15,14 +15,17 @@
 #include <string.h>
 
 namespace quarrel {
+
+// plog entry stored on disk
 struct EntryRaw {
   uint32_t size_;
   uint32_t version_;
   uint64_t last_value_id_;
   uint64_t last_prepare_id_;
-  char data[1];  // proposal + promised
+  char data[1];  // may contain two parts: proposed or promised proposal
 } __attribute__((packed, aligned(1)));
 
+// meta info for a plog instance(an array of paxos entry)
 // saved to disk asynchronously
 struct PlogMetaInfo {
   uint32_t type_;  // unused
@@ -30,10 +33,12 @@ struct PlogMetaInfo {
   uint64_t pinst_;
   uint64_t last_entry_;
   uint64_t first_entry_;
-  uint64_t last_apply_;  // not idempotent
   uint64_t last_chosen_;
+  uint64_t last_committed_;  // not idempotent
 } __attribute__((packed, aligned(1)));
 
+// in-memory representation of a paxos entry.
+// deserialzed from EntryRaw for existing entry.
 class Entry {
  public:
   Entry(const Configure& config, uint64_t pinst, uint64_t entry)
@@ -44,35 +49,35 @@ class Entry {
 
   uint64_t GenValueId() { return vig_.GetAndInc(); }
   uint64_t GenPrepareId() { return ig_.GetAndInc(); }
-  void SetProposal(std::shared_ptr<Proposal> p) { pp_ = std::move(p); }
+  void SetProposal(std::shared_ptr<Proposal> p) { accepted_ = std::move(p); }
   void SetPromise(std::shared_ptr<Proposal> p) { promised_ = std::move(p); }
   uint64_t SetPrepareIdGreaterThan(uint64_t val) { return ig_.SetGreatThan(val); }
 
   uint64_t EntryID() const { return entry_; }
 
   uint64_t Status() const {
-    if (pp_) return pp_->status_;
-    if (promised_) promised_->status_;
+    if (accepted_) return accepted_->status_;
+    if (promised_) return promised_->status_;
     return kPaxosState_INVALID_PROPOSAL;
   }
 
-  const std::shared_ptr<Proposal>& GetProposal() const { return pp_; }
+  const std::shared_ptr<Proposal>& GetProposal() const { return accepted_; }
   const std::shared_ptr<Proposal>& GetPromised() const { return promised_; }
 
-  int Choose() {
-      if (!pp_) {
-          return kErrCode_PROPOSAL_NOT_EXIST;
-      }
+  int SetChosen() {
+    if (!accepted_) {
+      return kErrCode_PROPOSAL_NOT_EXIST;
+    }
 
-      pp_->status_ = kPaxosState_CHOSEN;
-      return kErrCode_OK;
+    accepted_->status_ = kPaxosState_CHOSEN;
+    return kErrCode_OK;
   }
 
   uint32_t SerializeTo(std::string& output) {
     Proposal dummy;
     memset(&dummy, 0xff, sizeof(dummy));
 
-    auto proposal_sz = ProposalHeaderSz + (pp_ ? pp_->size_ : 1);
+    auto proposal_sz = ProposalHeaderSz + (accepted_ ? accepted_->size_ : 1);
     auto promised_sz = ProposalHeaderSz + (promised_ ? promised_->size_ : 1);
     auto total_sz = static_cast<uint32_t>(sizeof(EntryRaw) - 1 + proposal_sz + promised_sz);
 
@@ -85,7 +90,7 @@ class Entry {
     raw->last_value_id_ = vig_.Get();
     raw->last_prepare_id_ = ig_.Get();
 
-    Proposal* p1 = pp_.get();
+    Proposal* p1 = accepted_.get();
     if (p1 == NULL) p1 = &dummy;
 
     Proposal* p2 = promised_.get();
@@ -112,7 +117,7 @@ class Entry {
       return kErrCode_INVALID_PLOG_DATA;
     }
 
-    pp_ = std::move(CloneProposal(*p1));
+    accepted_ = std::move(CloneProposal(*p1));
     promised_ = std::move(CloneProposal(*p2));
     return kErrCode_OK;
   }
@@ -122,7 +127,7 @@ class Entry {
   IdGenByDate vig_;  // value IdGen
   uint64_t pinst_;
   uint64_t entry_;
-  std::shared_ptr<Proposal> pp_;        // proposal accepted
+  std::shared_ptr<Proposal> accepted_;  // proposal accepted
   std::shared_ptr<Proposal> promised_;  // prepare request promised
 };
 
@@ -294,7 +299,7 @@ class EntryMng {
     auto ent = GetEntry(entry);
     if (!ent) return kErrCode_ENTRY_NOT_EXIST;
 
-    auto ret = ent->Choose();
+    auto ret = ent->SetChosen();
     if (ret != kErrCode_OK) return ret;
 
     ret = SaveEntry(pinst_, entry, *ent);
