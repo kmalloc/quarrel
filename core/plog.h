@@ -133,16 +133,7 @@ class Entry {
 // An EntryMng represents one instance of plog(an array of log entry)
 // and it is supposed to be mutated from one thread only.
 class EntryMng {
- public:
-  EntryMng(std::shared_ptr<Configure> config, uint64_t pinst,
-           uint32_t entryCacheSize = 100000)
-      : db_(config->local_storage_path_),
-        config_(std::move(config)),
-        pinst_(pinst),
-        entries_(entryCacheSize) {}
-
-  virtual ~EntryMng() {}
-
+ protected:
   virtual int LoadEntry(uint64_t pinst, uint64_t entry, Entry&) = 0;
   virtual int SaveEntry(uint64_t pinst, uint64_t entry, const Entry&) = 0;
 
@@ -164,29 +155,23 @@ class EntryMng {
     return 0;
   }
 
-  virtual bool LoadAllFromDisk() {
-    PlogMetaInfo meta;
-    auto ret = LoadPlogMetaInfo(pinst_, meta);
-    if (ret != kErrCode_OK) {
-      LOG_ERR << "load metainfo failed for RecoverFromDisk, ret:" << ret;
-      return false;
-    }
+ public:
+  EntryMng(std::shared_ptr<Configure> config, uint64_t pinst,
+           uint32_t entryCacheSize = 100000)
+      : db_(config->local_storage_path_),
+        config_(std::move(config)),
+        pinst_(pinst),
+        entries_(entryCacheSize) {}
 
-    max_in_used_entry_ = 0;
-    last_chosen_entry_ = 0;
-    first_valid_entry_ = ~0ull;
-    first_unchosen_entry_ = ~0ull;
-    max_committed_entry_ = meta.last_committed_;
-    max_continue_chosen_entry_ = meta.last_committed_;
-    global_max_chosen_entry_ = 0;
+  virtual ~EntryMng() {}
 
-    uint64_t start_entry = 1;  // entry 0 is reserved.
+  bool RecoverRange(uint64_t start_entry, uint64_t end_entry) {
     std::vector<std::unique_ptr<Entry>> entries;
-    entries.reserve(entries_.Capacity());
+    entries.reserve(entries_.Capacity() / 2);
 
     while (1) {
       entries.clear();
-      ret = BatchLoadEntry(pinst_, start_entry, ~0ull, entries);  // load all
+      auto ret = BatchLoadEntry(pinst_, start_entry, end_entry, entries);
       if (ret != kErrCode_OK) {
         LOG_ERR << "entry batch load failed for RecoverFromDisk, ret:" << ret;
         break;
@@ -226,6 +211,28 @@ class EntryMng {
     if (last_chosen_entry_ > global_max_chosen_entry_) {
       global_max_chosen_entry_ = last_chosen_entry_;
     }
+
+    return kErrCode_OK;
+  }
+
+  bool LoadAllFromDisk() {
+    PlogMetaInfo meta;
+    auto ret = LoadPlogMetaInfo(pinst_, meta);
+    if (ret != kErrCode_OK) {
+      LOG_ERR << "load metainfo failed for RecoverFromDisk, ret:" << ret;
+      return false;
+    }
+
+    max_in_used_entry_ = 0;
+    last_chosen_entry_ = 0;
+    first_valid_entry_ = ~0ull;
+    first_unchosen_entry_ = ~0ull;
+    max_committed_entry_ = meta.last_committed_;
+    max_continue_chosen_entry_ = meta.last_committed_;
+    global_max_chosen_entry_ = 0;
+
+    uint64_t start_entry = 1;  // entry 0 is reserved.
+    RecoverRange(start_entry, ~0ull);
 
     return true;
   }
