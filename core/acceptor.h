@@ -21,13 +21,13 @@ struct PaxosRequest {
 };
 
 // will be indexed by thread num, make sure it is 64 byte aligned, so that no
-// false sharing will not occur.
+// false sharing will occur.
 struct WorkerData {
   WaitGroup wg_;
   std::thread th_;
+  std::atomic<uint64_t> pending_;
   LockFreeQueue<PaxosRequest> mq_;
-  std::atomic<uint64_t> pending_{0};
-} __attribute__((__aligned__(64)));
+};
 
 class Acceptor {
  public:
@@ -68,8 +68,7 @@ class Acceptor {
 
   std::shared_ptr<PlogMng> pmn_;
   std::shared_ptr<Configure> config_;
-
-  std::vector<std::unique_ptr<WorkerData>> workers_;
+  std::vector<WorkerData> workers_;
 };
 
 }  // namespace quarrel

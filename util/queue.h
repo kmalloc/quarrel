@@ -178,7 +178,6 @@ class LockFreeQueue {
 
   bool init_;
   Head* head_;
-
-} __attribute__((aligned(64)));
+};
 
 }  // namespace quarrel

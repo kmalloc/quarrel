@@ -18,15 +18,14 @@ int Acceptor::StartWorker() {
   assert(config_->acceptor_worker_count_ < config_->plog_inst_num_);
 
   run_ = 1;
-  workers_.clear();
-  workers_.reserve(num);
+  workers_ = std::vector<WorkerData>(num);
 
   for (auto i = 0u; i < num; i++) {
-    auto wd = make_unique<WorkerData>();
+    auto wd = &workers_[i];
     wd->wg_.Reset(1);
+    wd->pending_ = 0;
     wd->mq_.Init(config_->worker_msg_queue_sz_);
     wd->th_ = std::thread(&Acceptor::workerProc, this, i);
-    workers_.push_back(std::move(wd));
   }
 
   started_ = true;
@@ -36,8 +35,8 @@ int Acceptor::StartWorker() {
 int Acceptor::StopWorker() {
   run_ = 0;
   for (auto i = 0u; i < workers_.size(); i++) {
-    workers_[i]->wg_.Notify();
-    workers_[i]->th_.join();
+    workers_[i].wg_.Notify();
+    workers_[i].th_.join();
   }
   started_ = false;
   return kErrCode_OK;
@@ -54,17 +53,17 @@ int Acceptor::AddMsg(std::shared_ptr<PaxosMsg> msg, ResponseCallback cb) {
   req.cb_ = std::move(cb);
   req.msg_ = std::move(msg);
 
-  workers_[idx]->mq_.Enqueue(std::move(req), false);
-  if (workers_[idx]->pending_.fetch_add(1) == 0) {
-    workers_[idx]->wg_.Notify();
+  workers_[idx].mq_.Enqueue(std::move(req), false);
+  if (workers_[idx].pending_.fetch_add(1) == 0) {
+    workers_[idx].wg_.Notify();
   }
 
   return kErrCode_OK;
 }
 
 int Acceptor::workerProc(int workerid) {
+  auto queue = &workers_[workerid];
   using QueueType = LockFreeQueue<PaxosRequest>;
-  std::unique_ptr<WorkerData>& queue = workers_[workerid];
 
   while (run_ > 0) {
     PaxosRequest req;
