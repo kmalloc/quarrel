@@ -178,6 +178,7 @@ class EntryMng {
     first_unchosen_entry_ = ~0ull;
     max_committed_entry_ = meta.last_committed_;
     max_continue_chosen_entry_ = meta.last_committed_;
+    global_max_chosen_entry_ = 0;
 
     uint64_t start_entry = 1;  // entry 0 is reserved.
     std::vector<std::unique_ptr<Entry>> entries;

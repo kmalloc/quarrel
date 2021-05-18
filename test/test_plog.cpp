@@ -81,6 +81,10 @@ TEST(quarrel_plog, test_load_all_from_disk) {
   ASSERT_EQ(999, mng.GetMaxInUsedEnry());
   ASSERT_EQ(499, mng.GetLastChosenEntry());
   ASSERT_EQ(500, mng.GetFirstUnchosenEntry());
+  ASSERT_EQ(499, mng.GetGlobalMaxChosenEntry());
+  ASSERT_EQ(300, mng.GetMaxCommittedEntry());
+  ASSERT_EQ(499, mng.GetMaxContinueChosenEntry());
+  ASSERT_EQ(180, mng.GetFirstValidEntry());
 }
 
 TEST(quarrel_plog, test_entry_serialization) {
