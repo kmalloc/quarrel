@@ -31,7 +31,7 @@ qr: $(OBJ)
 
 test: $(TESTOBJ)
 	mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -o quarreltest $^ -lpthread -lgtest -lgtest_main
+	$(CXX) $(CXXFLAGS) -fsanitize=address -o quarreltest $^ -lpthread -lgtest -lgtest_main
 	./quarreltest
 
 # Build target for every single object file.

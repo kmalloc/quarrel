@@ -59,6 +59,7 @@ struct DummyLocalConn : public LocalConn {
       pmn_->SetChosen(rspfp->plid_, rspfp->pentry_);
     }
 
+    rspfp->max_chosen_ = pmn_->GetMaxChosenEntry(rspfp->plid_);
     data.cb_(std::move(rsp));
     return 0;
   }
@@ -147,6 +148,7 @@ struct DummyRemoteConn : public RemoteConn {
     }
 
     LOG_INFO << "dummy call to DoWrite()";
+    rpp->max_chosen_ = pmn_->GetMaxChosenEntry(rpp->plid_);
     std::async(std::launch::async, rsper, std::move(rsp));
     return kErrCode_OK;
   }
@@ -178,7 +180,10 @@ struct DummyEntryMngForProposerTest : public EntryMng {
     return kErrCode_OK;
   }
 
-  virtual int SavePlogMetaInfo() {
+  virtual int CommitChosen(uint64_t pinst, const Entry& entry, uint64_t max_committed_entry) {
+    (void)pinst;
+    (void)entry;
+    (void)max_committed_entry;
     return 0;
   }
 

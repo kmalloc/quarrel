@@ -50,7 +50,10 @@ struct DummyEntryMng : public EntryMng {
     return kErrCode_OK;
   }
 
-  virtual int SavePlogMetaInfo() {
+  virtual int CommitChosen(uint64_t pinst, const Entry& entry, uint64_t max_committed_entry) {
+    (void)pinst;
+    (void)entry;
+    (void)max_committed_entry;
     return 0;
   }
 

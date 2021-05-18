@@ -48,8 +48,8 @@ class Entry {
 
   uint64_t GenValueId() { return vig_.GetAndInc(); }
   uint64_t GenPrepareId() { return ig_.GetAndInc(); }
-  void SetProposal(std::shared_ptr<Proposal> p) { accepted_ = std::move(p); }
-  void SetPromise(std::shared_ptr<Proposal> p) { promised_ = std::move(p); }
+  void SetAccepted(std::shared_ptr<Proposal> p) { accepted_ = std::move(p); }
+  void SetPromised(std::shared_ptr<Proposal> p) { promised_ = std::move(p); }
   uint64_t SetPrepareIdGreaterThan(uint64_t val) { return ig_.SetGreatThan(val); }
 
   uint64_t EntryID() const { return entry_; }
@@ -146,19 +146,25 @@ class EntryMng {
   virtual int LoadEntry(uint64_t pinst, uint64_t entry, Entry&) = 0;
   virtual int SaveEntry(uint64_t pinst, uint64_t entry, const Entry&) = 0;
 
-  virtual int SavePlogMetaInfo() = 0;
   virtual int LoadPlogMetaInfo(uint64_t pinst, PlogMetaInfo& info) = 0;
 
-  // called peroidically to remove old log
-  //virtual int TrimPlog(uint64_t pinst, uint64_t begin_entry, uint64_t end_entry);
+  // NOTE: Commit() should make sure that both the entry and the max_committed_entry_ will be saved atomically.
+  // otherwise thosen chosen entry smaller than max_committed_entry will be committed multiple times.
+  virtual int CommitChosen(uint64_t pinst, const Entry& entry, uint64_t max_committed_entry) = 0;
 
   // end_entry == ~0ull indicates to load all entry
   virtual int BatchLoadEntry(uint64_t pinst, uint64_t begin_entry,
                              uint64_t end_entry, std::vector<std::unique_ptr<Entry>>& entries) = 0;
 
-  virtual bool LoadAllEntryFromDisk() {
-    // FIXME: ut for this function
+  // called peroidically to remove old log
+  virtual int TrimPlog(uint64_t pinst, uint64_t begin_entry, uint64_t end_entry) {
+    (void)pinst;
+    (void)begin_entry;
+    (void)end_entry;
+    return 0;
+  }
 
+  virtual bool LoadAllFromDisk() {
     PlogMetaInfo meta;
     auto ret = LoadPlogMetaInfo(pinst_, meta);
     if (ret != kErrCode_OK) {
@@ -168,21 +174,23 @@ class EntryMng {
 
     max_in_used_entry_ = 0;
     last_chosen_entry_ = 0;
+    first_valid_entry_ = ~0ull;
+    first_unchosen_entry_ = ~0ull;
     max_committed_entry_ = meta.last_committed_;
     max_continue_chosen_entry_ = meta.last_committed_;
 
-    uint64_t start_entry = 0;
+    uint64_t start_entry = 1;  // entry 0 is reserved.
     std::vector<std::unique_ptr<Entry>> entries;
-    entries.reserve(10000);
+    entries.reserve(entries_.Capacity());
 
     while (1) {
       entries.clear();
       ret = BatchLoadEntry(pinst_, start_entry, ~0ull, entries);  // load all
-      if (ret == kErrCode_ENTRY_NOT_EXIST) {
-        break;
-      } else if (ret != kErrCode_OK) {
+      if (ret != kErrCode_OK) {
         LOG_ERR << "entry batch load failed for RecoverFromDisk, ret:" << ret;
-        return false;
+        break;
+      } else if (entries.empty()) {
+        break;
       }
 
       for (auto j = 0u; j < entries.size(); j++) {
@@ -206,7 +214,7 @@ class EntryMng {
           max_in_used_entry_ = entry_id;
         }
 
-        if (entry_id > start_entry) {
+        if (entry_id >= start_entry) {
           start_entry = entry_id + 1;
         }
 
@@ -243,10 +251,6 @@ class EntryMng {
     return ret;
   }
 
-  uint64_t GetMaxChosenEntry() const {
-    return last_chosen_entry_;
-  }
-
   int SetPromised(const Proposal& p) {
     auto entry = p.pentry_;
     auto pc = CloneProposal(p);
@@ -255,7 +259,7 @@ class EntryMng {
       return kErrCode_ENTRY_NOT_EXIST;
     }
 
-    ent->SetPromise(std::move(pc));
+    ent->SetPromised(std::move(pc));
     return SaveEntry(pinst_, entry, *ent);
   }
 
@@ -264,7 +268,7 @@ class EntryMng {
     auto ent = GetEntry(entry);
     if (!ent) return kErrCode_PLOG_NOT_EXIST;
 
-    ent->SetPromise(NULL);
+    ent->SetPromised(NULL);
     return SaveEntry(pinst_, entry, *ent);
   }
 
@@ -274,7 +278,7 @@ class EntryMng {
     Entry* ent = GetEntry(entry);
     if (!ent) return kErrCode_ENTRY_NOT_EXIST;
 
-    ent->SetProposal(std::move(pc));
+    ent->SetAccepted(std::move(pc));
     return SaveEntry(pinst_, entry, *ent);
   }
 
@@ -313,7 +317,7 @@ class EntryMng {
     if (max_in_used_entry_ == ~0ull || entry > max_in_used_entry_) {
       max_in_used_entry_ = entry;
       if (LoadEntry(pinst_, entry, val) != kErrCode_OK) {
-          LOG_ERR << "Load entry failed, instance:" << pinst_ << ", entry id:" << entry;
+        LOG_ERR << "Load entry failed, instance:" << pinst_ << ", entry id:" << entry;
       }
     }
 
@@ -360,6 +364,9 @@ class EntryMng {
   uint64_t GetLastChosenEntry() const { return last_chosen_entry_; }
   uint64_t GetFirstUnchosenEntry() const { return first_unchosen_entry_; }
   uint64_t GetGlobalMaxChosenEntry() const { return global_max_chosen_entry_; }
+  uint64_t GetMaxCommittedEntry() const { return max_committed_entry_; }
+  uint64_t GetMaxContinueChosenEntry() const { return max_continue_chosen_entry_; }
+  uint64_t GetFirstValidEntry() const { return first_valid_entry_; }
 
   void SetGlobalMaxChosenEntry(uint64_t entry) {
     if (global_max_chosen_entry_ != ~0ull &&
@@ -446,7 +453,7 @@ class PlogMng {
 
   uint64_t GetMaxChosenEntry(uint64_t pinst) {
     pinst = pinst % entries_.size();
-    return entries_[pinst]->GetMaxChosenEntry();
+    return entries_[pinst]->GetLastChosenEntry();
   }
 
   uint64_t GenValueId(uint64_t pinst, uint64_t entry, uint64_t pid) {
@@ -473,17 +480,16 @@ class PlogMng {
     pinst = pinst % entries_.size();
 
     auto max_in_used = entries_[pinst]->GetMaxInUsedEnry();
-    auto local_max_chosen = entries_[pinst]->GetMaxChosenEntry();
+    auto local_max_chosen = entries_[pinst]->GetLastChosenEntry();
     auto global_max_chosen = entries_[pinst]->GetGlobalMaxChosenEntry();
 
     if (max_in_used == ~0ull && local_max_chosen == ~0ull) return false;
 
-    // FIXME: how to handle a proposal that is failed to be accepted?
-    // if (max_in_used > local_max_chosen) return false;
-
     assert(max_in_used >= local_max_chosen);
 
-    if (local_max_chosen < global_max_chosen) return true;
+    if (local_max_chosen < global_max_chosen) {
+      return true;
+    }
 
     return false;
   }

@@ -4,6 +4,85 @@
 
 using namespace quarrel;
 
+class DummyEntryMngForLoad : public EntryMng {
+ public:
+  PlogMetaInfo meta_;
+
+ public:
+  DummyEntryMngForLoad(std::shared_ptr<Configure> conf, uint64_t pinst, uint32_t cache_sz)
+      : EntryMng(std::move(conf), pinst, cache_sz) {
+    meta_.last_committed_ = 300;
+  }
+
+  virtual int LoadEntry(uint64_t, uint64_t, Entry&) {
+    return 0;
+  }
+
+  virtual int SaveEntry(uint64_t, uint64_t, const Entry&) {
+    return 0;
+  }
+
+  virtual int LoadPlogMetaInfo(uint64_t, PlogMetaInfo& meta) {
+    meta = meta_;
+    return 0;
+  }
+
+  // NOTE: Commit() should make sure that both the entry and the max_committed_entry_ will be saved atomically.
+  // otherwise thosen chosen entry smaller than max_committed_entry will be committed multiple times.
+  virtual int CommitChosen(uint64_t, const Entry&, uint64_t max_committed_entry) {
+    meta_.last_committed_ = max_committed_entry;
+    return 0;
+  }
+
+  // end_entry == ~0ull indicates to load all entry
+  virtual int BatchLoadEntry(uint64_t, uint64_t begin_entry,
+                             uint64_t end_entry, std::vector<std::unique_ptr<Entry>>& entries) {
+    if (end_entry == ~0ull) {
+      end_entry = 1000;
+    }
+
+    int count = 0;
+    for (auto i = 0; count < 110 && i + begin_entry < end_entry; i++) {
+      auto eid = i + begin_entry;
+      auto ent = make_unique<Entry>(*config_, pinst_, eid);
+      if (eid < 180) {
+        continue;
+      } else if (eid < 500) {
+        auto p = AllocProposal(111);
+        ent->SetAccepted(p);
+        ent->SetChosen();
+      } else if (eid < 800) {
+        auto p = AllocProposal(111);
+        p->status_ = kPaxosState_ACCEPTED;
+        ent->SetAccepted(p);
+      } else {
+        auto p = AllocProposal(111);
+        p->status_ = kPaxosState_PROMISED;
+        ent->SetPromised(p);
+      }
+
+      ++count;
+      entries.push_back(std::move(ent));
+    }
+
+    if (begin_entry >= 1000) {
+      return kErrCode_ENTRY_NOT_EXIST;
+    }
+
+    return 0;
+  }
+};
+
+TEST(quarrel_plog, test_load_all_from_disk) {
+  auto config = std::make_shared<Configure>();
+  DummyEntryMngForLoad mng(config, 233, 100);
+
+  ASSERT_TRUE(mng.LoadAllFromDisk());
+  ASSERT_EQ(999, mng.GetMaxInUsedEnry());
+  ASSERT_EQ(499, mng.GetLastChosenEntry());
+  ASSERT_EQ(500, mng.GetFirstUnchosenEntry());
+}
+
 TEST(quarrel_plog, test_entry_serialization) {
     Configure config;
 
@@ -37,8 +116,8 @@ TEST(quarrel_plog, test_entry_serialization) {
     p2->status_ = kPaxosState_ACCEPTED;
     strcpy(reinterpret_cast<char*>(p2->data_), "dummy data for p2");
 
-    ent.SetPromise(p1);
-    ent.SetProposal(p2);
+    ent.SetPromised(p1);
+    ent.SetAccepted(p2);
 
     std::string to;
 

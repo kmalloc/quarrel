@@ -5,7 +5,7 @@
 namespace quarrel {
     std::shared_ptr<Proposal> AllocProposal(uint32_t value_size) {
         auto total_sz = ProposalHeaderSz + value_size;
-        auto rp = reinterpret_cast<Proposal*>(malloc(total_sz));
+        auto rp = reinterpret_cast<Proposal*>(calloc(total_sz, 1));
         if (rp == NULL) return NULL;
 
         rp->size_  = value_size;
@@ -16,7 +16,7 @@ namespace quarrel {
     std::shared_ptr<PaxosMsg> AllocProposalMsg(uint32_t value_size) {
         // value_size == 0 is permitted
         auto total_sz = PaxosMsgHeaderSz + ProposalHeaderSz + value_size;
-        auto rp = reinterpret_cast<PaxosMsg*>(malloc(total_sz));
+        auto rp = reinterpret_cast<PaxosMsg*>(calloc(total_sz, 1));
         if (rp == NULL) return NULL;
 
         auto pp = reinterpret_cast<Proposal*>(rp->data_);

@@ -63,6 +63,7 @@ class LruMap {
   bool Exists(const key_t& key) const { return kv_.find(key) != kv_.end(); }
 
   size_t Size() const { return kv_.size(); }
+  size_t Capacity() const { return max_size_; }
 
  private:
   size_t max_size_;
