@@ -60,6 +60,11 @@ class LruMap {
     return true;
   }
 
+  void Clear() {
+    kv_.clear();
+    order_.clear();
+  }
+
   bool Exists(const key_t& key) const { return kv_.find(key) != kv_.end(); }
 
   size_t Size() const { return kv_.size(); }

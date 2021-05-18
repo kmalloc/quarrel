@@ -126,7 +126,7 @@ TEST(quarrel_plog, test_entry_serialization) {
     std::string to;
 
     Entry ent2(config, 44, 111);
-    ASSERT_EQ(ent.SerializeTo(to), p2->size_ + sizeof(EntryRaw) + 2 * ProposalHeaderSz);
+    ASSERT_EQ(ent.SerializeTo(to), p2->size_ + EntryHeadSize() + 2 * ProposalHeaderSz);
     ASSERT_EQ(kErrCode_OK, ent2.UnserializeFrom(to));
 
     ASSERT_EQ(ent.GenValueId(), ent2.GenValueId());
