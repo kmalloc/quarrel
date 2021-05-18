@@ -153,7 +153,7 @@ TEST(acceptor_test, test_acceptor_api) {
 
   p1->pid_ = 23;
   acceptor.AddMsg(m1, verify);
-  ASSERT_TRUE(wg1.Wait(10));
+  ASSERT_TRUE(wg1.Wait(30));
 
   ASSERT_TRUE(ret != NULL);
   auto rp = GetProposalFromMsg(ret.get());
@@ -164,7 +164,7 @@ TEST(acceptor_test, test_acceptor_api) {
   p1->pid_ = 22;
   p1->proposer_ = 3;
   acceptor.AddMsg(m1, verify);
-  ASSERT_TRUE(wg1.Wait(10));
+  ASSERT_TRUE(wg1.Wait(30));
   rp = GetProposalFromMsg(ret.get());
   ASSERT_EQ(kPaxosState_PROMISED, rp->status_);
   ASSERT_EQ(23, rp->pid_);
@@ -175,7 +175,7 @@ TEST(acceptor_test, test_acceptor_api) {
   p1->pid_ = 24;
   p1->proposer_ = 3;
   acceptor.AddMsg(m1, verify);
-  ASSERT_TRUE(wg1.Wait(10));
+  ASSERT_TRUE(wg1.Wait(30));
   rp = GetProposalFromMsg(ret.get());
   ASSERT_EQ(kPaxosState_PROMISED, rp->status_);
   ASSERT_EQ(24, rp->pid_);
@@ -186,7 +186,7 @@ TEST(acceptor_test, test_acceptor_api) {
   p1->pid_ = 25;
   memcpy(p1->data_, "writefail", 9);
   acceptor.AddMsg(m1, verify);
-  ASSERT_TRUE(wg1.Wait(10));
+  ASSERT_TRUE(wg1.Wait(30));
   rp = GetProposalFromMsg(ret.get());
   ASSERT_EQ(kPaxosState_PROMISED_FAILED, rp->status_);
   ASSERT_EQ(25, rp->pid_);
@@ -197,7 +197,7 @@ TEST(acceptor_test, test_acceptor_api) {
   p1->pid_ = 26;
   memcpy(p1->data_, "normal", 6);
   acceptor.AddMsg(m1, verify);
-  ASSERT_TRUE(wg1.Wait(10));
+  ASSERT_TRUE(wg1.Wait(30));
   rp = GetProposalFromMsg(ret.get());
   ASSERT_EQ(kPaxosState_PROMISED, rp->status_);
   ASSERT_EQ(26, rp->pid_);
@@ -206,7 +206,7 @@ TEST(acceptor_test, test_acceptor_api) {
   m1->type_ = kMsgType_ACCEPT_REQ;
   p1->status_ = kPaxosState_PROMISED;
   acceptor.AddMsg(m1, verify);
-  ASSERT_TRUE(wg1.Wait(10));
+  ASSERT_TRUE(wg1.Wait(30));
   rp = GetProposalFromMsg(ret.get());
   ASSERT_EQ(kPaxosState_ACCEPTED, rp->status_);
   ASSERT_EQ(26, rp->pid_);
@@ -217,7 +217,7 @@ TEST(acceptor_test, test_acceptor_api) {
   m1->type_ = kMsgType_ACCEPT_REQ;
   p1->status_ = kPaxosState_PROMISED;
   acceptor.AddMsg(m1, verify);
-  ASSERT_TRUE(wg1.Wait(10));
+  ASSERT_TRUE(wg1.Wait(30));
   rp = GetProposalFromMsg(ret.get());
   ASSERT_EQ(kPaxosState_ACCEPTED, rp->status_);
   ASSERT_EQ(27, rp->pid_);
@@ -227,7 +227,7 @@ TEST(acceptor_test, test_acceptor_api) {
   m1->type_ = kMsgType_ACCEPT_REQ;
   p1->status_ = kPaxosState_PROMISED;
   acceptor.AddMsg(m1, verify);
-  ASSERT_TRUE(wg1.Wait(10));
+  ASSERT_TRUE(wg1.Wait(30));
   rp = GetProposalFromMsg(ret.get());
   ASSERT_EQ(kPaxosState_ACCEPTED_FAILED, rp->status_);
   ASSERT_EQ(27, rp->pid_);
@@ -237,7 +237,7 @@ TEST(acceptor_test, test_acceptor_api) {
   m1->type_ = kMsgType_ACCEPT_REQ;
   p1->status_ = kPaxosState_PROMISED;
   acceptor.AddMsg(m1, verify);
-  ASSERT_TRUE(wg1.Wait(10));
+  ASSERT_TRUE(wg1.Wait(30));
   rp = GetProposalFromMsg(ret.get());
   ASSERT_EQ(kPaxosState_ACCEPTED, rp->status_);
   ASSERT_EQ(27, rp->pid_);
@@ -249,7 +249,7 @@ TEST(acceptor_test, test_acceptor_api) {
   m1->type_ = kMsgType_PREPARE_REQ;
   p1->status_ = kPaxosState_PREPARED;
   acceptor.AddMsg(m1, verify);
-  ASSERT_TRUE(wg1.Wait(10));
+  ASSERT_TRUE(wg1.Wait(30));
   rp = GetProposalFromMsg(ret.get());
   ASSERT_EQ(kPaxosState_ACCEPTED, rp->status_);
   ASSERT_EQ(27, rp->pid_);
@@ -263,7 +263,7 @@ TEST(acceptor_test, test_acceptor_api) {
   m1->type_ = kMsgType_PREPARE_REQ;
   p1->status_ = kPaxosState_PREPARED;
   acceptor.AddMsg(m1, verify);
-  ASSERT_TRUE(wg1.Wait(10));
+  ASSERT_TRUE(wg1.Wait(30));
   rp = GetProposalFromMsg(ret.get());
   ASSERT_EQ(kPaxosState_PROMISED, rp->status_);
   ASSERT_EQ(30, rp->pid_);
@@ -275,7 +275,7 @@ TEST(acceptor_test, test_acceptor_api) {
   m1->type_ = kMsgType_ACCEPT_REQ;
   p1->status_ = kPaxosState_PROMISED;
   acceptor.AddMsg(m1, verify);
-  ASSERT_TRUE(wg1.Wait(10));
+  ASSERT_TRUE(wg1.Wait(30));
   rp = GetProposalFromMsg(ret.get());
   ASSERT_EQ(kPaxosState_ACCEPTED, rp->status_);
   ASSERT_EQ(33, rp->pid_);
@@ -288,7 +288,7 @@ TEST(acceptor_test, test_acceptor_api) {
   m1->type_ = kMsgType_PREPARE_REQ;
   p1->status_ = kPaxosState_PREPARED;
   acceptor.AddMsg(m1, verify);
-  ASSERT_TRUE(wg1.Wait(10));
+  ASSERT_TRUE(wg1.Wait(30));
   rp = GetProposalFromMsg(ret.get());
   ASSERT_EQ(kPaxosState_PROMISED, rp->status_);
   ASSERT_EQ(40, rp->pid_);
@@ -300,7 +300,7 @@ TEST(acceptor_test, test_acceptor_api) {
   m1->type_ = kMsgType_ACCEPT_REQ;
   p1->status_ = kPaxosState_PROMISED;
   acceptor.AddMsg(m1, verify);
-  ASSERT_TRUE(wg1.Wait(10));
+  ASSERT_TRUE(wg1.Wait(30));
   rp = GetProposalFromMsg(ret.get());
   ASSERT_EQ(kPaxosState_ACCEPTED_FAILED, rp->status_);
   ASSERT_EQ(43, rp->pid_);
@@ -314,7 +314,7 @@ TEST(acceptor_test, test_acceptor_api) {
   m1->type_ = kMsgType_CHOSEN_REQ;
   p1->status_ = kPaxosState_ACCEPTED;
   acceptor.AddMsg(m1, verify);
-  ASSERT_TRUE(wg1.Wait(10));
+  ASSERT_TRUE(wg1.Wait(30));
   rp = GetProposalFromMsg(ret.get());
   ASSERT_EQ(kPaxosState_INVALID_PROPOSAL, rp->status_);
 
@@ -323,7 +323,7 @@ TEST(acceptor_test, test_acceptor_api) {
   m1->type_ = kMsgType_CHOSEN_REQ;
   p1->status_ = kPaxosState_ACCEPTED;
   acceptor.AddMsg(m1, verify);
-  ASSERT_TRUE(wg1.Wait(10));
+  ASSERT_TRUE(wg1.Wait(30));
   rp = GetProposalFromMsg(ret.get());
   ASSERT_EQ(kPaxosState_INVALID_PROPOSAL, rp->status_);
 
@@ -333,7 +333,7 @@ TEST(acceptor_test, test_acceptor_api) {
   m1->type_ = kMsgType_CHOSEN_REQ;
   p1->status_ = kPaxosState_ACCEPTED;
   acceptor.AddMsg(m1, verify);
-  ASSERT_TRUE(wg1.Wait(10));
+  ASSERT_TRUE(wg1.Wait(30));
   rp = GetProposalFromMsg(ret.get());
   ASSERT_EQ(kPaxosState_INVALID_PROPOSAL, rp->status_);
 
@@ -344,7 +344,7 @@ TEST(acceptor_test, test_acceptor_api) {
   m1->type_ = kMsgType_CHOSEN_REQ;
   p1->status_ = kPaxosState_ACCEPTED;
   acceptor.AddMsg(m1, verify);
-  ASSERT_TRUE(wg1.Wait(10));
+  ASSERT_TRUE(wg1.Wait(30));
   rp = GetProposalFromMsg(ret.get());
   ASSERT_EQ(kPaxosState_COMMIT_FAILED, rp->status_);
 
@@ -356,7 +356,7 @@ TEST(acceptor_test, test_acceptor_api) {
   m1->type_ = kMsgType_ACCEPT_REQ;
   p1->status_ = kPaxosState_PROMISED;
   acceptor.AddMsg(m1, verify);
-  ASSERT_TRUE(wg1.Wait(10));
+  ASSERT_TRUE(wg1.Wait(30));
   rp = GetProposalFromMsg(ret.get());
   ASSERT_EQ(kPaxosState_ACCEPTED, rp->status_);
   ASSERT_EQ(53, rp->pid_);
@@ -367,7 +367,7 @@ TEST(acceptor_test, test_acceptor_api) {
   m1->type_ = kMsgType_CHOSEN_REQ;
   p1->status_ = kPaxosState_ACCEPTED;
   acceptor.AddMsg(m1, verify);
-  ASSERT_TRUE(wg1.Wait(10));
+  ASSERT_TRUE(wg1.Wait(30));
   rp = GetProposalFromMsg(ret.get());
   ASSERT_EQ(kPaxosState_CHOSEN, rp->status_);
 
@@ -376,7 +376,7 @@ TEST(acceptor_test, test_acceptor_api) {
   m1->type_ = kMsgType_CHOSEN_REQ;
   p1->status_ = kPaxosState_ACCEPTED;
   acceptor.AddMsg(m1, verify);
-  ASSERT_TRUE(wg1.Wait(10));
+  ASSERT_TRUE(wg1.Wait(30));
   rp = GetProposalFromMsg(ret.get());
   ASSERT_EQ(kPaxosState_ALREADY_CHOSEN, rp->status_);
 
