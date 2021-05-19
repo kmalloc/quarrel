@@ -12,8 +12,8 @@
 using namespace quarrel;
 
 struct DummyEntryMng : public EntryMng {
-  DummyEntryMng(std::shared_ptr<Configure> config, uint64_t pinst)
-      : EntryMng(std::move(config), pinst) {}
+  DummyEntryMng(std::shared_ptr<Configure> config, uint64_t pinst, int local_acceptor)
+      : EntryMng(std::move(config), pinst, local_acceptor) {}
 
   virtual int SaveEntry(uint64_t pinst, uint64_t entry, const Entry& ent) {
     (void)pinst;
@@ -76,19 +76,19 @@ struct DummyEntryMng : public EntryMng {
 TEST(acceptor_test, test_acceptor_api) {
   auto config = std::make_shared<Configure>();
   config->timeout_ = 8;  // 8ms
-  config->local_ = {1, ConnType_LOCAL, "xxxx:yyy"};
-  config->local_id_ = 1;
+  config->local_ = {0, ConnType_LOCAL, "xxxx:yyy"};
   config->plog_inst_num_ = 5;
   config->total_acceptor_ = 3;
   config->acceptor_worker_count_ = 2;
-  config->peer_.push_back({2, ConnType_REMOTE, "aaaa:bb"});
-  config->peer_.push_back({3, ConnType_REMOTE, "aaaa2:bb2"});
-  std::shared_ptr<PlogMng> pmn = std::make_shared<PlogMng>(config);
+  config->peer_.push_back({1, ConnType_REMOTE, "aaaa:bb"});
+  config->peer_.push_back({2, ConnType_REMOTE, "aaaa2:bb2"});
+
+  auto mapper = std::make_shared<PaxosGroup3>();
+  std::shared_ptr<PlogMng> pmn = std::make_shared<PlogMng>(config, mapper);
 
   auto entry_mng_creator =
-      [](int pinst,
-         std::shared_ptr<Configure> conf) -> std::unique_ptr<EntryMng> {
-    return make_unique<DummyEntryMng>(std::move(conf), pinst);
+      [](std::shared_ptr<Configure> conf, uint64_t pinst, int local_acceptor) -> std::unique_ptr<EntryMng> {
+    return make_unique<DummyEntryMng>(std::move(conf), pinst, local_acceptor);
   };
 
   pmn->SetEntryMngCreator(entry_mng_creator);

@@ -14,7 +14,7 @@ class LruMap {
   using key_value_pair_t = std::pair<key_t, value_t>;
   using list_iterator_t = typename std::list<key_value_pair_t>::iterator;
 
-  LruMap(size_t max_size) : max_size_(max_size) {}
+  explicit LruMap(size_t max_size) : max_size_(max_size) {}
 
   void Put(const key_t& key, value_t value) {
     auto it = kv_.find(key);

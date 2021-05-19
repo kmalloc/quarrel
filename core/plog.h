@@ -7,8 +7,10 @@
 #include "logger.h"
 
 #include "stl.hpp"
+#include "time.hpp"
 #include "idgen.hpp"
 #include "lrumap.hpp"
+#include "paxos_group.h"
 
 #include <vector>
 #include <assert.h>
@@ -30,8 +32,8 @@ struct PlogMetaInfo {
 // deserialzed from EntryRaw for existing entry.
 class Entry {
  public:
-  Entry(const Configure& config, uint64_t pinst, uint64_t entry)
-      : ig_(config.local_id_ + config.pid_cookie_, config.total_acceptor_),
+  Entry(const Configure& config, int local_id, uint64_t pinst, uint64_t entry)
+      : ig_(local_id + config.pid_cookie_, config.total_acceptor_),
         vig_(0xff, 1),
         pinst_(pinst),
         entry_(entry) {}
@@ -78,19 +80,24 @@ class Entry {
 // An EntryMng represents one instance of plog(an array of log entry)
 // and it is supposed to be mutated from one thread only.
 class EntryMng {
+  // TODO entry recycle
+
  public:
-  EntryMng(std::shared_ptr<Configure> config, uint64_t pinst,
-           uint32_t entryCacheSize = 100000)
+  EntryMng(std::shared_ptr<Configure> config,
+           uint64_t pinst,
+           int local_acceptor)
       : db_(config->local_storage_path_),
         config_(std::move(config)),
         pinst_(pinst),
-        entries_(entryCacheSize) {}
+        local_acceptor_id_(local_acceptor),
+        entries_(config_->entry_cache_num_) {}
 
   virtual ~EntryMng() {}
 
   int SetChosen(uint64_t entry);
   bool LoadAllFromDisk();
   bool RecoverRange(uint64_t start_entry, uint64_t end_entry);
+  void SetLocalAcceptor(int id) { local_acceptor_id_ = id; }
 
   void Reset();
   uint64_t GetNextEntry(bool create);
@@ -146,6 +153,8 @@ class EntryMng {
   std::shared_ptr<Configure> config_;
 
   uint64_t pinst_;
+  int local_acceptor_id_{0};
+  uint64_t last_access_time_{0};
   uint64_t max_committed_entry_{0};
   uint64_t max_continue_chosen_entry_{0};
   uint64_t first_valid_entry_{~0ull};  // ~0 indicates empty.
@@ -158,69 +167,71 @@ class EntryMng {
 };
 
 using EntryMngCreator = std::function<std::unique_ptr<EntryMng>(
-    int pinst, std::shared_ptr<Configure> config)>;
+    std::shared_ptr<Configure> config, uint64_t pinst, int local_acceptor)>;
 
 class PlogMng {
  public:
-  PlogMng(std::shared_ptr<Configure> config) : config_(std::move(config)) {}
+  PlogMng(std::shared_ptr<Configure> config, std::shared_ptr<PaxosGroupBase> mapper)
+      : config_(std::move(config)), pg_mapper_(std::move(mapper)) {}
 
+  // FIXME: launch thread to recycle entry mng
   int InitPlog();
 
   Entry& GetEntryAndCreateIfNotExist(uint64_t pinst, uint64_t entry) {
-    pinst = pinst % entries_.size();
-    return entries_[pinst]->GetEntryAndCreateIfNotExist(entry);
+    auto mng = GetEntryMngAndCreateIfNotExist(pinst);
+    return mng->GetEntryAndCreateIfNotExist(entry);
   }
 
   int SetPromised(const Proposal& p) {
-      auto pinst = p.plid_;
-      pinst = pinst % entries_.size();
-      return entries_[pinst]->SetPromised(p);
+    auto pinst = p.plid_;
+    auto mng = GetEntryMngAndCreateIfNotExist(pinst);
+    return mng->SetPromised(p);
   }
 
   int ClearPromised(uint64_t pinst, uint64_t entry) {
-      pinst = pinst % entries_.size();
-      return entries_[pinst]->ClearPromised(pinst, entry);
+    auto mng = GetEntryMngAndCreateIfNotExist(pinst);
+    return mng->ClearPromised(pinst, entry);
   }
 
   int SetAccepted(const Proposal& p) {
-      auto pinst = p.plid_;
-      pinst = pinst % entries_.size();
-      return entries_[pinst]->SetAccepted(p);
+    auto pinst = p.plid_;
+    auto mng = GetEntryMngAndCreateIfNotExist(pinst);
+    return mng->SetAccepted(p);
   }
 
   int SetChosen(uint64_t pinst, uint64_t entry) {
-      pinst = pinst % entries_.size();
-      return entries_[pinst]->SetChosen(entry);
+    auto mng = GetEntryMngAndCreateIfNotExist(pinst);
+    return mng->SetChosen(entry);
   }
 
   uint64_t GetNextEntry(uint64_t pinst, bool create) {
-    pinst = pinst % entries_.size();
-    return entries_[pinst]->GetNextEntry(create);
+    auto mng = GetEntryMngAndCreateIfNotExist(pinst);
+    return mng->GetNextEntry(create);
   }
 
   uint64_t GetMaxChosenEntry(uint64_t pinst) {
-    pinst = pinst % entries_.size();
-    return entries_[pinst]->GetLastChosenEntry();
+    auto mng = GetEntryMngAndCreateIfNotExist(pinst);
+    return mng->GetLastChosenEntry();
   }
 
   uint64_t GenValueId(uint64_t pinst, uint64_t entry, uint64_t pid) {
-    pinst = pinst % entries_.size();
-    return entries_[pinst]->GenValueId(entry, pid);
+    auto mng = GetEntryMngAndCreateIfNotExist(pinst);
+    return mng->GenValueId(entry, pid);
   }
 
   uint64_t GenPrepareId(uint64_t pinst, uint64_t entry) {
-    pinst = pinst % entries_.size();
-    return entries_[pinst]->GenPrepareId(entry);
+    auto mng = GetEntryMngAndCreateIfNotExist(pinst);
+    return mng->GenPrepareId(entry);
   }
 
   uint64_t SetPrepareIdGreaterThan(uint64_t pinst, uint64_t entry, uint64_t v) {
-    pinst = pinst % entries_.size();
-    return entries_[pinst]->SetPrepareIdGreaterThan(entry, v);
+    auto mng = GetEntryMngAndCreateIfNotExist(pinst);
+    return mng->SetPrepareIdGreaterThan(entry, v);
   }
 
   void SetGlobalMaxChosenEntry(uint64_t pinst, uint64_t entry) {
-    pinst = pinst % entries_.size();
-    return entries_[pinst]->SetGlobalMaxChosenEntry(entry);
+    auto mng = GetEntryMngAndCreateIfNotExist(pinst);
+    return mng->SetGlobalMaxChosenEntry(entry);
   }
 
   void SetEntryMngCreator(EntryMngCreator creator) {
@@ -230,9 +241,13 @@ class PlogMng {
   bool IsLocalChosenLagBehind(uint64_t pinst);
 
  private:
+  EntryMng* GetEntryMngAndCreateIfNotExist(uint64_t pinst);
+
+ private:
   EntryMngCreator creator_;
   std::shared_ptr<Configure> config_;
-  std::vector<std::unique_ptr<EntryMng>> entries_;
+  std::shared_ptr<PaxosGroupBase> pg_mapper_;
+  std::vector<std::unique_ptr<EntryMng>> mngs_;
 };
 }  // namespace quarrel
 

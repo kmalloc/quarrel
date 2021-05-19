@@ -107,7 +107,7 @@ int Acceptor::doHandleMsg(PaxosRequest req) {
       return kErrCode_OK;
   }
 
-  rsp->from_ = config_->local_id_;
+  rsp->from_ = config_->local_.id_;
   rsp->version_ = req.msg_->version_;
   rsp->magic_ = req.msg_->magic_;
   rsp->reqid_ =req.msg_->reqid_;
@@ -120,10 +120,10 @@ std::shared_ptr<PaxosMsg> Acceptor::handlePrepareReq(Proposal& pp) {
   auto entry = pp.pentry_;
   std::shared_ptr<PaxosMsg> rsp;
 
-  auto& ent = pmn_->GetEntryAndCreateIfNotExist(pinst, entry);
-
-  // TODO: check previous entry.
+  // FIXME: check previous entry.
   // and trigger a catchup if current acceptor lags behind
+
+  auto& ent = pmn_->GetEntryAndCreateIfNotExist(pinst, entry);
 
   const auto& existed_pp = ent.GetProposal();
   const auto& existed_promise = ent.GetPromised();
@@ -144,18 +144,18 @@ std::shared_ptr<PaxosMsg> Acceptor::handlePrepareReq(Proposal& pp) {
       vsize = existed_promise->size_;
       from_pp = existed_promise.get();
   } else {
-      // a new proposal request
-      from_pp = &pp;
-      vsize = pp.size_;
-      pp.status_ = kPaxosState_PROMISED;
-      auto ret = pmn_->SetPromised(pp);
-      if (ret != kErrCode_OK) {
-        vsize = 0;
-        errcode = kErrCode_WRITE_PLOG_FAIL;
-        status = kPaxosState_PROMISED_FAILED;
-      } else {
-        pp.status_ = kPaxosState_PREPARED;
-      }
+    // a new proposal request
+    from_pp = &pp;
+    vsize = pp.size_;
+    pp.status_ = kPaxosState_PROMISED;
+    auto ret = pmn_->SetPromised(pp);
+    if (ret != kErrCode_OK) {
+      vsize = 0;
+      errcode = kErrCode_WRITE_PLOG_FAIL;
+      status = kPaxosState_PROMISED_FAILED;
+    } else {
+      pp.status_ = kPaxosState_PREPARED;
+    }
   }
 
   auto ret = AllocProposalMsg(vsize);
@@ -174,6 +174,9 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
   auto pinst = pp.plid_;
   auto entry = pp.pentry_;
   std::shared_ptr<PaxosMsg> rsp;
+
+  // FIXME: check previous entry.
+  // and trigger a catchup if current acceptor lags behind
 
   auto& ent = pmn_->GetEntryAndCreateIfNotExist(pinst, entry);
 
@@ -253,6 +256,8 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
         errcode = kErrCode_WRITE_PLOG_FAIL;
       }
     }
+  } else {
+    // FIXME: #0 proposal optimization.
   }
 
   auto ret = AllocProposalMsg(0);

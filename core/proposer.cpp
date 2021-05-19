@@ -6,6 +6,16 @@
 
 namespace quarrel {
 
+struct BatchRpcContext {
+  int ret_;
+  WaitGroup wg_;
+  std::atomic<int> rsp_count_;
+  std::shared_ptr<PaxosMsg> rsp_msg_[MAX_ACCEPTOR_NUM];
+
+  BatchRpcContext(int expect_rsp_count)
+      : wg_(expect_rsp_count), rsp_count_(0) {}
+};
+
 Proposer::Proposer(std::shared_ptr<Configure> config)
     : config_(std::move(config)) {}
 
@@ -18,7 +28,7 @@ std::shared_ptr<PaxosMsg> Proposer::allocPaxosMsg(uint64_t pinst,
   auto entry = pmn_->GetNextEntry(pinst, true);
   auto pid = pmn_->GenPrepareId(pinst, entry);
 
-  pm->from_ = config_->local_id_;
+  pm->from_ = config_->local_.id_;
   pm->type_ = kMsgType_PREPARE_REQ;
   pm->version_ = config_->msg_version_;
 
@@ -31,7 +41,7 @@ std::shared_ptr<PaxosMsg> Proposer::allocPaxosMsg(uint64_t pinst,
   pp->pentry_ = entry;
   pp->opaque_ = opaque;
   pp->status_ = kPaxosState_PREPARED;
-  pp->proposer_ = uint16_t(config_->local_id_);
+  pp->proposer_ = uint16_t(config_->local_.id_);
   pp->value_id_ = pmn_->GenValueId(pinst, entry, pid);
   pp->max_chosen_ = pmn_->GetMaxChosenEntry(pinst);
 
@@ -87,8 +97,8 @@ int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
     return ret;
   }
 
+  pm->from_ = config_->local_.id_;
   pm->type_ = kMsgType_ACCEPT_REQ;
-  pm->from_ = config_->local_id_;
   pp->status_ = kPaxosState_ACCEPTED;
   pp->max_chosen_ = pmn_->GetMaxChosenEntry(pinst);
 
@@ -135,8 +145,9 @@ std::shared_ptr<BatchRpcContext> Proposer::doBatchRpcRequest(
   };
 
   ctx->ret_ = kErrCode_OK;
+  auto pinst = GetPLIdFromMsg(pm.get());
   auto& local = conn_->GetLocalConn();
-  auto& remote = conn_->GetRemoteConn();
+  auto& remote = conn_->GetRemoteConn(pinst);
 
   RpcReqData req{config_->timeout_, std::move(cb), pm};
 

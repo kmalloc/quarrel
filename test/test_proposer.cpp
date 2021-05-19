@@ -164,8 +164,8 @@ struct DummyRemoteConn : public RemoteConn {
 };
 
 struct DummyEntryMngForProposerTest : public EntryMng {
-  DummyEntryMngForProposerTest(std::shared_ptr<Configure> config, uint64_t pinst)
-      : EntryMng(std::move(config), pinst) {}
+  DummyEntryMngForProposerTest(std::shared_ptr<Configure> config, uint64_t pinst, int local_acceptor)
+      : EntryMng(std::move(config), pinst, local_acceptor) {}
 
   virtual int SaveEntry(uint64_t pinst, uint64_t entry, const Entry& ent) {
     (void)pinst;
@@ -208,14 +208,14 @@ TEST(proposer, doPropose) {
   config->timeout_ = 8;  // 8ms
   config->pid_cookie_ = 8; // prepare id > 8
   config->local_ = {1, ConnType_LOCAL, "xxxx:yyy"};
-  config->local_id_ = 1;
   config->plog_inst_num_ = 5;
   config->total_acceptor_ = 3;
   config->peer_.push_back({2, ConnType_REMOTE, "aaaa:bb"});
   config->peer_.push_back({3, ConnType_REMOTE, "aaaa2:bb2"});
 
   Proposer pp(config);
-  std::shared_ptr<PlogMng> pmn = std::make_shared<PlogMng>(config);
+  auto mapper = std::make_shared<PaxosGroup3>();
+  std::shared_ptr<PlogMng> pmn = std::make_shared<PlogMng>(config, mapper);
 
   auto conn_creator = [&](AddrInfo addr) -> std::unique_ptr<Conn> {
     if (addr.type_ == ConnType_LOCAL) {
@@ -225,17 +225,17 @@ TEST(proposer, doPropose) {
     return make_unique<DummyRemoteConn>(std::move(addr), pmn);
   };
 
-  auto conn_mng = std::make_shared<ConnMng>(config);
+  auto conn_mng = std::make_shared<ConnMng>(config, mapper);
 
   conn_mng->SetConnCreator(conn_creator);
-  ASSERT_EQ(3, conn_mng->CreateConn());
+  ASSERT_EQ(2, conn_mng->CreateConn());
 
   auto& local = conn_mng->GetLocalConn();
   ASSERT_EQ(ConnType_LOCAL, local->GetType());
   ASSERT_STREQ("xxxx:yyy", local->GetAddr().addr_.c_str());
 
-  auto& r1 = conn_mng->GetRemoteConn()[0];
-  auto& r2 = conn_mng->GetRemoteConn()[1];
+  auto& r1 = conn_mng->GetRemoteConn(0)[0];
+  auto& r2 = conn_mng->GetRemoteConn(0)[1];
 
   ASSERT_EQ(ConnType_REMOTE, r1->GetType());
   ASSERT_STREQ("aaaa:bb", r1->GetAddr().addr_.c_str());
@@ -243,8 +243,8 @@ TEST(proposer, doPropose) {
   ASSERT_STREQ("aaaa2:bb2", r2->GetAddr().addr_.c_str());
 
   auto entry_mng_creator =
-      [](int pinst, std::shared_ptr<Configure> conf) -> std::unique_ptr<EntryMng> {
-    return make_unique<DummyEntryMngForProposerTest>(std::move(conf), pinst);
+      [](std::shared_ptr<Configure> conf, uint64_t pinst, int local_acceptor) -> std::unique_ptr<EntryMng> {
+    return make_unique<DummyEntryMngForProposerTest>(std::move(conf), pinst, local_acceptor);
   };
 
   pmn->SetEntryMngCreator(entry_mng_creator);
@@ -258,14 +258,14 @@ TEST(proposer, doPropose) {
   auto dlocal = dynamic_cast<DummyLocalConn*>(local.get());
 
   ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value"));
-  ASSERT_EQ(config->local_id_, dr1->accepted_->from_);
+  ASSERT_EQ(config->local_.id_, dr1->accepted_->from_);
   ASSERT_EQ(kMsgType_ACCEPT_REQ, dr1->accepted_->type_);
 
   auto p11 = reinterpret_cast<Proposal*>(dr1->accepted_->data_);
   auto p12 = reinterpret_cast<Proposal*>(dr2->accepted_->data_);
   auto p13 = reinterpret_cast<Proposal*>(dlocal->accepted_->data_);
 
-  ASSERT_EQ(config->local_id_, p11->proposer_);
+  ASSERT_EQ(config->local_.id_, p11->proposer_);
   ASSERT_EQ(kPaxosState_ACCEPTED, p11->status_);
   ASSERT_EQ(11, p11->size_);
   ASSERT_EQ(0xbadf00d, p11->opaque_);
@@ -277,14 +277,14 @@ TEST(proposer, doPropose) {
   ASSERT_TRUE(dlocal->chosen_);
 
   ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value"));
-  ASSERT_EQ(config->local_id_, dr1->accepted_->from_);
+  ASSERT_EQ(config->local_.id_, dr1->accepted_->from_);
   ASSERT_EQ(kMsgType_ACCEPT_REQ, dr1->accepted_->type_);
 
   auto p21 = reinterpret_cast<Proposal*>(dr1->accepted_->data_);
   auto p22 = reinterpret_cast<Proposal*>(dr2->accepted_->data_);
   auto p23 = reinterpret_cast<Proposal*>(dlocal->accepted_->data_);
 
-  ASSERT_EQ(config->local_id_, p21->proposer_);
+  ASSERT_EQ(config->local_.id_, p21->proposer_);
   ASSERT_EQ(kPaxosState_ACCEPTED, p21->status_);
   ASSERT_EQ(11, p21->size_);
   ASSERT_EQ(0xbadf00d, p21->opaque_);

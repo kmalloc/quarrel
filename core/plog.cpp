@@ -218,7 +218,7 @@ Entry* EntryMng::GetEntry(uint64_t entry) {
   auto ret = entries_.GetPtr(entry);
   if (ret) return ret->get();
 
-  auto ent = make_unique<Entry>(*config_, pinst_, entry);
+  auto ent = make_unique<Entry>(*config_, local_acceptor_id_, pinst_, entry);
 
   if (LoadEntry(pinst_, entry, *ent) != kErrCode_OK) return NULL;
 
@@ -240,8 +240,7 @@ Entry& EntryMng::GetEntryAndCreateIfNotExist(uint64_t entry) {
 Entry& EntryMng::CreateEntry(uint64_t entry) {
   auto ptr = entries_.GetPtr(entry);
   if (ptr) return **ptr;
-
-  auto ent = std::unique_ptr<Entry>(new Entry(*config_, pinst_, entry));
+  auto ent = std::unique_ptr<Entry>(new Entry(*config_, local_acceptor_id_, pinst_, entry));
 
   Entry& val = *ent;
   entries_.Put(entry, std::move(ent));
@@ -249,9 +248,9 @@ Entry& EntryMng::CreateEntry(uint64_t entry) {
   if (max_in_used_entry_ == ~0ull || entry > max_in_used_entry_) {
     max_in_used_entry_ = entry;
     if (LoadEntry(pinst_, entry, val) != kErrCode_OK) {
-      LOG_ERR << "Load entry failed, instance:" << pinst_ << ", entry id:" << entry;
+        LOG_ERR << "Load entry failed, instance:" << pinst_ << ", entry id:" << entry;
+      }
     }
-  }
 
   return val;
 }
@@ -290,11 +289,11 @@ uint64_t EntryMng::SetPrepareIdGreaterThan(uint64_t entry, uint64_t val) {
 
 // PlogMng definition.
 bool PlogMng::IsLocalChosenLagBehind(uint64_t pinst) {
-  pinst = pinst % entries_.size();
+  auto mng = GetEntryMngAndCreateIfNotExist(pinst);
 
-  auto max_in_used = entries_[pinst]->GetMaxInUsedEnry();
-  auto local_max_chosen = entries_[pinst]->GetLastChosenEntry();
-  auto global_max_chosen = entries_[pinst]->GetGlobalMaxChosenEntry();
+  auto max_in_used = mng->GetMaxInUsedEnry();
+  auto local_max_chosen = mng->GetLastChosenEntry();
+  auto global_max_chosen = mng->GetGlobalMaxChosenEntry();
 
   if (max_in_used == ~0ull && local_max_chosen == ~0ull) return false;
 
@@ -308,14 +307,26 @@ bool PlogMng::IsLocalChosenLagBehind(uint64_t pinst) {
 }
 
 int PlogMng::InitPlog() {
-  entries_.clear();
-  entries_.reserve(config_->plog_inst_num_);
+  mngs_.clear();
+  mngs_.reserve(config_->plog_inst_num_);
 
   for (auto i = 0u; i < config_->plog_inst_num_; ++i) {
-    entries_.push_back(creator_(i, config_));
+    auto local_acceptor = pg_mapper_->GetMemberIdBySvrId(i, config_->local_.id_);
+    mngs_.push_back(creator_(config_, i, local_acceptor));
   }
 
   return 0;
+}
+
+EntryMng* PlogMng::GetEntryMngAndCreateIfNotExist(uint64_t pinst) {
+  pinst = (pinst % mngs_.size());
+
+  auto& mng = mngs_[pinst];
+  if (!mng) {
+    auto local_acceptor = pg_mapper_->GetMemberIdBySvrId(pinst, config_->local_.id_);
+    mng = creator_(config_, pinst, local_acceptor);
+  }
+  return mng.get();
 }
 
 }  // namespace quarrel

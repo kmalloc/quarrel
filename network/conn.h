@@ -4,12 +4,14 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <mutex>
 #include <functional>
 
 #include "ptype.h"
 #include "config.h"
 #include "idgen.hpp"
 #include "lrumap.hpp"
+#include "paxos_group.h"
 
 namespace quarrel {
 
@@ -125,8 +127,8 @@ using ConnCreator = std::function<std::unique_ptr<Conn>(AddrInfo)>;
 
 class ConnMng {
  public:
-  explicit ConnMng(std::shared_ptr<Configure> config)
-      : config_(std::move(config)) {}
+  ConnMng(std::shared_ptr<Configure> config, std::shared_ptr<PaxosGroupBase> mapper)
+      : config_(std::move(config)), pg_mapper_(std::move(mapper)) {}
 
   int CreateConn();
 
@@ -136,7 +138,12 @@ class ConnMng {
 
   std::unique_ptr<LocalConn>& GetLocalConn() { return local_conn_; }
 
-  std::vector<std::unique_ptr<RemoteConn>>& GetRemoteConn() {
+  // create if not exist
+  RemoteConn& GetRemoteConnByAddr(uint64_t pinst, const AddrInfo& addr);
+
+  std::vector<std::unique_ptr<RemoteConn>>& GetRemoteConn(uint64_t pinst) {
+    // FIXME: select remote peers for pinst
+    (void)pinst;
     return remote_conn_;
   }
 
@@ -144,9 +151,13 @@ class ConnMng {
   ConnMng(const ConnMng&) = delete;
   ConnMng& operator=(const ConnMng&) = delete;
 
+  std::mutex lock_;
   ConnCreator conn_creator_;
   std::shared_ptr<Configure> config_;
   std::unique_ptr<LocalConn> local_conn_;
+  std::shared_ptr<PaxosGroupBase> pg_mapper_;
+
+  // remote conn is ordered by svr id
   std::vector<std::unique_ptr<RemoteConn>> remote_conn_;
 };
 }  // namespace quarrel

@@ -7,7 +7,7 @@ INCLUDE := -I /usr/local/include/gtest/ -I./core -I./network -I./util
 
 # List of all .cpp source files.
 CPP = $(wildcard core/*.cpp) $(wildcard util/*.cpp) $(wildcard network/*.cpp)
-TEST = $(wildcard test/*.cpp) util/logger.cpp network/conn.cpp core/ptype.cpp core/proposer.cpp core/acceptor.cpp core/plog.cpp
+TEST = $(wildcard test/*.cpp) util/logger.cpp network/conn.cpp core/ptype.cpp core/proposer.cpp core/acceptor.cpp core/plog.cpp core/paxos_group.cpp
 
 # All .o files go to build dir.
 OBJ = $(CPP:%.cpp=$(BUILD_DIR)/%.o)

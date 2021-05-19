@@ -51,6 +51,7 @@ class Paxos {
   std::shared_ptr<Configure> config_;
   std::shared_ptr<ConnMng> conn_mng_;
   std::shared_ptr<PlogMng> plog_mng_;
+  std::shared_ptr<PaxosGroupBase> pg_mapper_;
 
   // those use basic info comes after.
   Acceptor acceptor_;
