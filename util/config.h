@@ -24,6 +24,7 @@ struct Configure {
   uint32_t pid_cookie_{0};
 
   uint32_t total_acceptor_{0};
+  uint32_t total_proposer_{3};  // number of proposers, usally this should be the same as acceptor. this number is used to generate proposal id locally.
   uint32_t pg_type_{PGT_Quorum3};
   uint32_t acceptor_worker_count_{0};
   uint32_t entry_cache_num_{100000};
@@ -31,7 +32,7 @@ struct Configure {
 
   uint32_t msg_version_{0};         // msg version
   uint32_t storage_type_{0};        // storage type for plog
-  uint32_t plog_inst_num_{0};       // plog instance number
+  uint32_t plog_inst_num_{5};       // plog instance count a quorum of servers, usally this should be relatively small, eg 1000?
   std::string local_storage_path_;  // storage path
 
   AddrInfo local_;

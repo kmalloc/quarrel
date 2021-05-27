@@ -165,7 +165,8 @@ std::shared_ptr<PaxosMsg> Acceptor::handlePrepareReq(Proposal& pp) {
   ret->type_ = kMsgType_PREPARE_RSP;
   memcpy(rpp, from_pp, ProposalHeaderSz + vsize);
   rpp->status_ = status;
-  rpp->max_chosen_ = pmn_->GetMaxChosenEntry(pinst);
+  rpp->last_chosen_ = pmn_->GetMaxChosenEntry(pinst);
+  rpp->last_chosen_from_ = uint16_t(~0u);
 
   return std::move(ret);
 }
@@ -266,7 +267,8 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
   memcpy(rpp, accepted_pp, ProposalHeaderSz);
 
   rpp->size_ = 0;
-  rpp->max_chosen_ = pmn_->GetMaxChosenEntry(pinst);
+  rpp->last_chosen_from_ = uint16_t(~0u);
+  rpp->last_chosen_ = pmn_->GetMaxChosenEntry(pinst);
 
   ret->errcode_ = errcode;
   ret->type_ = kMsgType_ACCEPT_RSP;
@@ -315,7 +317,8 @@ std::shared_ptr<PaxosMsg> Acceptor::handleChosenReq(Proposal& pp) {
   existed_pp->status_ = kPaxosState_CHOSEN;
   auto err = pmn_->SetChosen(pinst, entry);
 
-  rpp->max_chosen_ = pmn_->GetMaxChosenEntry(pinst);
+  rpp->last_chosen_from_ = uint16_t(~0u);
+  rpp->last_chosen_ = pmn_->GetMaxChosenEntry(pinst);
 
   if (err != kErrCode_OK) {
     ret->errcode_ = kErrCode_WRITE_PLOG_FAIL;

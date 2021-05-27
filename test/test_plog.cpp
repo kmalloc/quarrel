@@ -44,7 +44,7 @@ class DummyEntryMngForLoad : public EntryMng {
     int count = 0;
     for (auto i = 0; count < 110 && i + begin_entry < end_entry; i++) {
       auto eid = i + begin_entry;
-      auto ent = make_unique<Entry>(*config_, local_acceptor_id_, pinst_, eid);
+      auto ent = make_unique<Entry>(pinst_, eid);
       if (eid < 180) {
         continue;
       } else if (eid < 500) {
@@ -91,7 +91,7 @@ TEST(quarrel_plog, test_entry_serialization) {
   Configure config;
   config.total_acceptor_ = 23;
 
-  Entry ent(config, 23, 3, 122);
+  Entry ent(3, 122);
 
   auto p1 = AllocProposal(233);
   auto p2 = AllocProposal(133);
@@ -101,7 +101,6 @@ TEST(quarrel_plog, test_entry_serialization) {
   p1->plid_ = 3;
   p1->pentry_ = 122;
   p1->proposer_ = 1;
-  p1->batch_num_ = 1;
   p1->opaque_ = 0xbadf00d;
   p1->value_id_ = 0xbadf11d;
   p1->status_ = kPaxosState_PROMISED;
@@ -112,7 +111,6 @@ TEST(quarrel_plog, test_entry_serialization) {
   p2->plid_ = 3;
   p2->pentry_ = 122;
   p2->proposer_ = 2;
-  p2->batch_num_ = 1;
   p2->opaque_ = 0xbadf22d;
   p2->value_id_ = 0xbadf33d;
   p2->status_ = kPaxosState_ACCEPTED;
@@ -123,12 +121,9 @@ TEST(quarrel_plog, test_entry_serialization) {
 
   std::string to;
 
-  Entry ent2(config, 23, 44, 111);
+  Entry ent2(44, 111);
   ASSERT_EQ(ent.SerializeTo(to), p2->size_ + EntryHeadSize() + 2 * ProposalHeaderSz);
   ASSERT_EQ(kErrCode_OK, ent2.UnserializeFrom(to));
-
-  ASSERT_EQ(ent.GenValueId(), ent2.GenValueId());
-  ASSERT_EQ(ent.GenPrepareId(), ent2.GenPrepareId());
 
   const auto& pp1 = ent2.GetProposal();
   const auto& pp2 = ent2.GetPromised();

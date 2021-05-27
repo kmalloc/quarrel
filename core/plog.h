@@ -8,7 +8,6 @@
 
 #include "stl.hpp"
 #include "time.hpp"
-#include "idgen.hpp"
 #include "lrumap.hpp"
 #include "paxos_group.h"
 
@@ -32,18 +31,11 @@ struct PlogMetaInfo {
 // deserialzed from EntryRaw for existing entry.
 class Entry {
  public:
-  Entry(const Configure& config, int local_id, uint64_t pinst, uint64_t entry)
-      : ig_(local_id + config.pid_cookie_, config.total_acceptor_),
-        vig_(0xff, 1),
-        pinst_(pinst),
-        entry_(entry) {}
-
-  uint64_t GenValueId() { return vig_.GetAndInc(); }
-  uint64_t GenPrepareId() { return ig_.GetAndInc(); }
+  Entry(uint64_t pinst, uint64_t entry)
+      : pinst_(pinst), entry_(entry) {}
 
   void SetAccepted(std::shared_ptr<Proposal> p) { accepted_ = std::move(p); }
   void SetPromised(std::shared_ptr<Proposal> p) { promised_ = std::move(p); }
-  uint64_t SetPrepareIdGreaterThan(uint64_t val) { return ig_.SetGreatThan(val); }
 
   uint64_t EntryID() const { return entry_; }
 
@@ -69,8 +61,6 @@ class Entry {
   int UnserializeFrom(const std::string& from);
 
  private:
-  IdGen ig_;         // proposal id generator
-  IdGenByDate vig_;  // value id generator
   uint64_t pinst_;
   uint64_t entry_;
   std::shared_ptr<Proposal> accepted_;  // proposal accepted
@@ -106,17 +96,12 @@ class EntryMng {
   int SetAccepted(const Proposal& p);
   Entry* GetEntry(uint64_t entry);
 
-  // create entry if it does not exist
-  Entry& GetEntryAndCreateIfNotExist(uint64_t entry);
-
   Entry& CreateEntry(uint64_t entry);
-  uint64_t GenPrepareId(uint64_t entry);
 
-  uint64_t GenValueId(uint64_t entry, uint64_t pid);
   void SetGlobalMaxChosenEntry(uint64_t entry);
 
-  // return new value
-  uint64_t SetPrepareIdGreaterThan(uint64_t entry, uint64_t val);
+  // create entry if it does not exist
+  Entry& GetEntryAndCreateIfNotExist(uint64_t entry);
 
   uint64_t GetMaxInUsedEnry() const { return max_in_used_entry_; }
   uint64_t GetLastChosenEntry() const { return last_chosen_entry_; }
@@ -212,21 +197,6 @@ class PlogMng {
   uint64_t GetMaxChosenEntry(uint64_t pinst) {
     auto mng = GetEntryMngAndCreateIfNotExist(pinst);
     return mng->GetLastChosenEntry();
-  }
-
-  uint64_t GenValueId(uint64_t pinst, uint64_t entry, uint64_t pid) {
-    auto mng = GetEntryMngAndCreateIfNotExist(pinst);
-    return mng->GenValueId(entry, pid);
-  }
-
-  uint64_t GenPrepareId(uint64_t pinst, uint64_t entry) {
-    auto mng = GetEntryMngAndCreateIfNotExist(pinst);
-    return mng->GenPrepareId(entry);
-  }
-
-  uint64_t SetPrepareIdGreaterThan(uint64_t pinst, uint64_t entry, uint64_t v) {
-    auto mng = GetEntryMngAndCreateIfNotExist(pinst);
-    return mng->SetPrepareIdGreaterThan(entry, v);
   }
 
   void SetGlobalMaxChosenEntry(uint64_t pinst, uint64_t entry) {

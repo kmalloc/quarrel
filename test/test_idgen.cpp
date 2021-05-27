@@ -11,6 +11,6 @@ TEST(idgen, idgenapi) {
     ASSERT_EQ(1, ig.GetAndInc());
     ASSERT_EQ(6, ig.GetAndInc());
 
-    ig.SetGreatThan(33);
+    ig.SetGreaterThan(33);
     ASSERT_EQ(36, ig.GetAndInc());
 }

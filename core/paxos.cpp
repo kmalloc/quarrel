@@ -17,7 +17,6 @@ Paxos::Paxos(std::unique_ptr<Configure> config)
   conn_mng_ = std::make_shared<ConnMng>(config_, pg_mapper_);
 
   proposer_.SetConnMng(conn_mng_);
-  proposer_.SetPlogMng(plog_mng_);
   acceptor_.SetPlogMng(plog_mng_);
 }
 

@@ -12,6 +12,7 @@
 #include <thread>
 #include <memory>
 #include <vector>
+#include <functional>
 
 namespace quarrel {
 
@@ -43,6 +44,12 @@ class Acceptor {
 
   // note: every request required a response.
   int AddMsg(std::shared_ptr<PaxosMsg> m, ResponseCallback cb);
+
+  // broadcast chosen msg
+  // used to optimize proposer states
+  using ChosenNotifyFunc = std::function<std::shared_ptr<PaxosMsg>>;
+
+  void AddChosenNotify(ChosenNotifyFunc);
 
   void SetPlogMng(std::shared_ptr<PlogMng> pm) { pmn_ = std::move(pm); }
 
