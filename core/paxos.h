@@ -32,7 +32,11 @@ class Paxos {
 
   // try to propose a new value.
   // empty value indicates a read probe, testing whether local is up to date.
-  // paxos_inst: the paxos instance to use, default to 0
+  // paxos_inst: the paxos instance to use, default to 0.
+  // the total number of instances for a quorum is expected to be relativelly small(maybe < 1000).
+  // for a cluster of servers, however, instance count could be really large.
+  // users need to devide those instances for each quorum and make proper instance id mapping.
+  // from a quorum's point of view, it handles only a small consecutive array of instances.
   int Propose(uint64_t opaque, const std::string& value,
               uint64_t paxos_inst = 0);
 

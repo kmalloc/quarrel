@@ -59,7 +59,7 @@ struct DummyLocalConn : public LocalConn {
       pmn_->SetChosen(rspfp->plid_, rspfp->pentry_);
     }
 
-    rspfp->max_chosen_ = pmn_->GetMaxChosenEntry(rspfp->plid_);
+    rspfp->last_chosen_ = pmn_->GetMaxChosenEntry(rspfp->plid_);
     data.cb_(std::move(rsp));
     return 0;
   }
@@ -148,7 +148,7 @@ struct DummyRemoteConn : public RemoteConn {
     }
 
     LOG_INFO << "dummy call to DoWrite()";
-    rpp->max_chosen_ = pmn_->GetMaxChosenEntry(rpp->plid_);
+    rpp->last_chosen_ = pmn_->GetMaxChosenEntry(rpp->plid_);
     std::async(std::launch::async, rsper, std::move(rsp));
     return kErrCode_OK;
   }
@@ -250,7 +250,6 @@ TEST(proposer, doPropose) {
   pmn->SetEntryMngCreator(entry_mng_creator);
   pmn->InitPlog();
 
-  pp.SetPlogMng(pmn);
   pp.SetConnMng(conn_mng);
 
   auto dr1 = dynamic_cast<DummyRemoteConn*>(r1.get());

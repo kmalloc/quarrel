@@ -40,6 +40,7 @@ enum PaxosMsgType {
   kMsgType_CHOSEN_RSP = 6,
   kMsgType_INVALID_REQ = 7,
   kMsgType_CHORE_REQ = 101,
+  kMsgType_CHORE_CATCHUP = 102,
 };
 
 enum PaxosErrCode {
@@ -72,9 +73,9 @@ struct Proposal {
 
   uint64_t plid_;        // plog id
   uint64_t pentry_;      // plog entry
-  uint64_t max_chosen_;  // max chosen entry from source
+  uint64_t last_chosen_;       // last chosen entry from source
+  uint16_t last_chosen_from_;  // proposer for last chosen entry
   uint16_t proposer_;
-  uint16_t batch_num_;  // for batch preparation, that is, one prepare request for entry slot range from pentry_ to pentry_ + batch_num_;
 
   uint32_t size_;  // sizeof value
   uint32_t status_;
@@ -84,39 +85,39 @@ struct Proposal {
   uint8_t data_[1];  // struct hack
 } __attribute__((packed, aligned(1)));
 
-    struct PaxosMsg {
-        uint32_t magic_;
-        uint32_t size_;
-        uint32_t type_;
-        uint32_t version_;
-        uint32_t from_;
-        uint32_t errcode_;
-        uint64_t reqid_; // rpc id
-        uint8_t  data_[1]; // struct hack
-    } __attribute__((packed, aligned(1)));
+struct PaxosMsg {
+  uint32_t magic_;
+  uint32_t size_;
+  uint32_t type_;
+  uint32_t version_;
+  uint32_t from_;
+  uint32_t errcode_;
+  uint64_t reqid_;   // rpc id
+  uint8_t data_[1];  // struct hack
+} __attribute__((packed, aligned(1)));
 
-    constexpr auto PaxosMsgHeaderSz = offsetof(PaxosMsg, data_);
-    constexpr auto ProposalHeaderSz = offsetof(Proposal, data_);
+constexpr auto PaxosMsgHeaderSz = offsetof(PaxosMsg, data_);
+constexpr auto ProposalHeaderSz = offsetof(Proposal, data_);
 
-    std::shared_ptr<Proposal> CloneProposal(const Proposal& pm);
-    std::shared_ptr<Proposal> AllocProposal(uint32_t value_size);
-    std::shared_ptr<PaxosMsg> CloneProposalMsg(const PaxosMsg& pm);
-    std::shared_ptr<PaxosMsg> AllocProposalMsg(uint32_t value_size);
+std::shared_ptr<Proposal> CloneProposal(const Proposal& pm);
+std::shared_ptr<Proposal> AllocProposal(uint32_t value_size);
+std::shared_ptr<PaxosMsg> CloneProposalMsg(const PaxosMsg& pm);
+std::shared_ptr<PaxosMsg> AllocProposalMsg(uint32_t value_size);
 
-    inline Proposal GenDummyProposal() {
-      Proposal d;
-      memset(&d, 0, sizeof(d));
-      d.size_ = 1;
-      return d;
-    }
-
-    inline Proposal* GetProposalFromMsg(PaxosMsg* pm) {
-        return reinterpret_cast<Proposal*>(pm->data_);
-    }
-
-    inline uint64_t GetPLIdFromMsg(const PaxosMsg* pm) {
-      return reinterpret_cast<const Proposal*>(pm->data_)->plid_;
-    }
+inline Proposal GenDummyProposal() {
+  Proposal d;
+  memset(&d, 0, sizeof(d));
+  d.size_ = 1;
+  return d;
 }
+
+inline Proposal* GetProposalFromMsg(PaxosMsg* pm) {
+  return reinterpret_cast<Proposal*>(pm->data_);
+}
+
+inline uint64_t GetPLIdFromMsg(const PaxosMsg* pm) {
+  return reinterpret_cast<const Proposal*>(pm->data_)->plid_;
+}
+}  // namespace quarrel
 
 #endif

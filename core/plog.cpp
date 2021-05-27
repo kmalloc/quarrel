@@ -6,8 +6,6 @@ namespace quarrel {
 struct EntryRaw {
   uint32_t size_;
   uint32_t version_;
-  uint64_t last_value_id_;
-  uint64_t last_prepare_id_;
   char data[1];  // may contain two parts: proposed or promised proposal
 } __attribute__((packed, aligned(1)));
 
@@ -28,8 +26,6 @@ uint32_t Entry::SerializeTo(std::string& output) {
   EntryRaw* raw = reinterpret_cast<EntryRaw*>(&output[0]);
   raw->version_ = 0x11;
   raw->size_ = total_sz;
-  raw->last_value_id_ = vig_.Get();
-  raw->last_prepare_id_ = ig_.Get();
 
   Proposal* p1 = accepted_.get();
   if (p1 == NULL) p1 = &s_dummy_;
@@ -50,9 +46,6 @@ int Entry::UnserializeFrom(const std::string& from) {
     LOG_ERR << "from size:" << from.size() << ", expected sz:" << raw->size_;
     return kErrCode_INVALID_PLOG_DATA;
   }
-
-  vig_.SetGreatThan(raw->last_value_id_);
-  ig_.SetGreatThan(raw->last_prepare_id_);
 
   const Proposal* p1 = reinterpret_cast<const Proposal*>(raw->data);
   const Proposal* p2 = reinterpret_cast<const Proposal*>(raw->data + ProposalHeaderSz + p1->size_);
@@ -218,7 +211,7 @@ Entry* EntryMng::GetEntry(uint64_t entry) {
   auto ret = entries_.GetPtr(entry);
   if (ret) return ret->get();
 
-  auto ent = make_unique<Entry>(*config_, local_acceptor_id_, pinst_, entry);
+  auto ent = make_unique<Entry>(pinst_, entry);
 
   if (LoadEntry(pinst_, entry, *ent) != kErrCode_OK) return NULL;
 
@@ -240,7 +233,7 @@ Entry& EntryMng::GetEntryAndCreateIfNotExist(uint64_t entry) {
 Entry& EntryMng::CreateEntry(uint64_t entry) {
   auto ptr = entries_.GetPtr(entry);
   if (ptr) return **ptr;
-  auto ent = std::unique_ptr<Entry>(new Entry(*config_, local_acceptor_id_, pinst_, entry));
+  auto ent = std::unique_ptr<Entry>(new Entry(pinst_, entry));
 
   Entry& val = *ent;
   entries_.Put(entry, std::move(ent));
@@ -255,21 +248,6 @@ Entry& EntryMng::CreateEntry(uint64_t entry) {
   return val;
 }
 
-uint64_t EntryMng::GenPrepareId(uint64_t entry) {
-  Entry* ent = GetEntry(entry);
-  if (!ent) return ~0ull;
-
-  return ent->GenPrepareId();
-}
-
-uint64_t EntryMng::GenValueId(uint64_t entry, uint64_t pid) {
-  (void)pid;  // eliminate warning
-  Entry* ent = GetEntry(entry);
-  if (!ent) return ~0ull;
-
-  return ent->GenValueId();
-}
-
 void EntryMng::SetGlobalMaxChosenEntry(uint64_t entry) {
   if (global_max_chosen_entry_ != ~0ull &&
       global_max_chosen_entry_ >= entry) {
@@ -277,14 +255,6 @@ void EntryMng::SetGlobalMaxChosenEntry(uint64_t entry) {
   }
 
   global_max_chosen_entry_ = entry;
-}
-
-// return new value
-uint64_t EntryMng::SetPrepareIdGreaterThan(uint64_t entry, uint64_t val) {
-  Entry* ent = GetEntry(entry);
-  if (!ent) return ~0ull;
-
-  return ent->SetPrepareIdGreaterThan(val);
 }
 
 // PlogMng definition.

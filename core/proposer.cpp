@@ -17,16 +17,23 @@ struct BatchRpcContext {
 };
 
 Proposer::Proposer(std::shared_ptr<Configure> config)
-    : config_(std::move(config)) {}
+    : config_(std::move(config)) {
+  auto svrid = config_->local_.id_;
+  auto icount = config_->plog_inst_num_;
+  auto pcount = config_->total_proposer_;
 
-std::shared_ptr<PaxosMsg> Proposer::allocPaxosMsg(uint64_t pinst,
-                                                  uint64_t opaque,
-                                                  uint32_t value_size) {
+  locks_ = std::vector<std::mutex>(icount);
+  states_.resize(icount, InstanceState(svrid, pcount));
+}
+
+std::shared_ptr<PaxosMsg> Proposer::allocPaxosMsg(uint64_t pinst, uint64_t opaque, uint32_t value_size) {
   auto pm = AllocProposalMsg(value_size);
   if (!pm) return NULL;
 
-  auto entry = pmn_->GetNextEntry(pinst, true);
-  auto pid = pmn_->GenPrepareId(pinst, entry);
+  auto& state = states_[pinst];
+
+  auto pid = state.ig_.GetAndInc();
+  auto entry = state.last_chosen_entry_ + 1;
 
   pm->from_ = config_->local_.id_;
   pm->type_ = kMsgType_PREPARE_REQ;
@@ -37,32 +44,30 @@ std::shared_ptr<PaxosMsg> Proposer::allocPaxosMsg(uint64_t pinst,
   // pp->term_ = xxxxx;
   pp->pid_ = pid;
   pp->plid_ = pinst;
-  pp->batch_num_ = 1;
   pp->pentry_ = entry;
   pp->opaque_ = opaque;
   pp->status_ = kPaxosState_PREPARED;
   pp->proposer_ = uint16_t(config_->local_.id_);
-  pp->value_id_ = pmn_->GenValueId(pinst, entry, pid);
-  pp->max_chosen_ = pmn_->GetMaxChosenEntry(pinst);
+
+  pp->value_id_ = state.vig_.GetAndInc();
+  pp->last_chosen_ = state.last_chosen_entry_;
+  pp->last_chosen_from_ = uint16_t(state.last_chosen_from_);
 
   return pm;
 }
 
 int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
-  assert(pmn_);
   assert(conn_);
 
-  if (pmn_->IsLocalChosenLagBehind(pinst)) {
-    // FIXME: catchup by entry from peers.
-    // or for better performance: range catchup from peers.
-    return kErrCode_NEED_CATCHUP;
-  }
+  pinst = pinst % locks_.size();
+  std::lock_guard<std::mutex> l(locks_[pinst]);
 
   auto pm = allocPaxosMsg(pinst, opaque, uint32_t(val.size()));
   if (!pm) return kErrCode_OOM;
 
   int ret = 0;
   auto pp = reinterpret_cast<Proposal*>(pm->data_);
+  auto entry = pp->pentry_;
 
   // don't send value for prepare,not necessary.
   // memcpy(pp->data_, val.data(), val.size());
@@ -100,7 +105,8 @@ int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
   pm->from_ = config_->local_.id_;
   pm->type_ = kMsgType_ACCEPT_REQ;
   pp->status_ = kPaxosState_ACCEPTED;
-  pp->max_chosen_ = pmn_->GetMaxChosenEntry(pinst);
+  pp->last_chosen_ = states_[pinst].last_chosen_entry_;
+  pp->last_chosen_from_ = uint16_t(states_[pinst].last_chosen_from_);
 
   auto ret2 = doAccept(pm);
 
@@ -108,14 +114,46 @@ int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
     uint32_t size = pp->size_;
     pm->type_ = kMsgType_CHOSEN_REQ;
     pp->status_ = kPaxosState_CHOSEN;
-    pp->size_ = 0; // chosen req doesn't need to have value
+    pp->size_ = 0;  // chosen req doesn't need to have value
     pm->size_ -= size;
+
+    UpdateChosenInfo(pinst, entry, pp->proposer_);
+
     doChosen(pm);
   } else {
     ret = ret2;
   }
 
   return ret;
+}
+
+bool Proposer::UpdatePrepareId(uint64_t pinst, uint64_t pid) {
+  auto& state = states_[pinst];
+  state.ig_.SetGreaterThan(pid);
+  return true;
+}
+
+bool Proposer::UpdateChosenInfo(uint64_t pinst, uint64_t chosen, uint64_t from) {
+  auto& state = states_[pinst];
+
+  if (chosen < state.last_chosen_entry_) {
+    LOG_ERR << "local chosen entry > new chosen, pinst:" << pinst << ", current chosen:"
+            << state.last_chosen_entry_ << ", new chosen:" << chosen << ", from:" << from;
+    return false;
+  }
+
+  state.ig_.Reset(config_->local_.id_);
+
+  state.last_chosen_from_ = from;
+  state.last_chosen_entry_ = chosen;
+  return true;
+}
+
+int Proposer::onChosenNotify(std::shared_ptr<PaxosMsg> msg) {
+  auto pp = GetProposalFromMsg(msg.get());
+  std::lock_guard<std::mutex> l(locks_[pp->plid_]);
+  UpdateChosenInfo(pp->plid_, pp->pentry_, pp->proposer_);
+  return 0;
 }
 
 bool Proposer::canSkipPrepare(uint64_t pinst, uint64_t entry) {
@@ -197,13 +235,13 @@ int Proposer::doPrepare(std::shared_ptr<PaxosMsg>& pm) {
       continue;
     }
 
-    pmn_->SetGlobalMaxChosenEntry(rsp_proposal->plid_,
-                                  rsp_proposal->max_chosen_);
+    if (rsp_proposal->last_chosen_ > 0) {
+      UpdateChosenInfo(rsp_proposal->plid_, rsp_proposal->last_chosen_, rsp_proposal->last_chosen_from_);
+    }
 
     if (rsp_proposal->pid_ > origin_proposal->pid_) {
       // rejected
-      pmn_->SetPrepareIdGreaterThan(
-          origin_proposal->plid_, origin_proposal->pentry_, rsp_proposal->pid_);
+      UpdatePrepareId(origin_proposal->plid_, rsp_proposal->pid_);
       continue;
     }
 
@@ -223,7 +261,7 @@ int Proposer::doPrepare(std::shared_ptr<PaxosMsg>& pm) {
       if (last_voted.get() == NULL || lastp->pid_ < rsp_proposal->pid_) {
         // last vote with the largest prepare id
 
-        // FIXME: no majority is required(maybe we should)
+        // NOTE: no majority is required(maybe we should)
         // consistency is maintained, but this value come from nowhere may
         // surprise user.
         last_voted = std::move(m);
@@ -264,29 +302,27 @@ int Proposer::doAccept(std::shared_ptr<PaxosMsg>& pm) {
       continue;
     }
 
-    pmn_->SetGlobalMaxChosenEntry(rsp_proposal->plid_,
-                                  rsp_proposal->max_chosen_);
+    if (rsp_proposal->last_chosen_ > 0) {
+      UpdateChosenInfo(rsp_proposal->plid_, rsp_proposal->last_chosen_, rsp_proposal->last_chosen_from_);
+    }
 
     if (rsp_proposal->status_ != kPaxosState_ACCEPTED) {
+      UpdatePrepareId(origin_proposal->plid_, rsp_proposal->pid_);
       LOG_ERR << "peer failed to accept, status:" << rsp_proposal->status_
               << ", from:" << m->from_ << " @(" << rsp_proposal->plid_ << ","
               << rsp_proposal->pentry_ << ")";
-      pmn_->SetPrepareIdGreaterThan(
-          origin_proposal->plid_, origin_proposal->pentry_, rsp_proposal->pid_);
       continue;
     }
 
     if (rsp_proposal->pid_ > origin_proposal->pid_) {
       // rejected
-      pmn_->SetPrepareIdGreaterThan(
-          origin_proposal->plid_, origin_proposal->pentry_, rsp_proposal->pid_);
+      UpdatePrepareId(origin_proposal->plid_, rsp_proposal->pid_);
       continue;
     }
 
     if (rsp_proposal->value_id_ != origin_proposal->value_id_ ||
         rsp_proposal->opaque_ != origin_proposal->opaque_) {
       // not possible without fast-accept enabled.
-      // FIXME
       LOG_ERR << "invalid doAccept rsp from peer(" << pm->from_
               << "), value id is changed, rsp:(" << rsp_proposal->value_id_
               << "," << rsp_proposal->opaque_ << "), origin:("
@@ -306,6 +342,7 @@ int Proposer::doAccept(std::shared_ptr<PaxosMsg>& pm) {
 }
 
 int Proposer::doChosen(std::shared_ptr<PaxosMsg>& pm) {
+  // broadcast to peers
   doBatchRpcRequest(0, pm);
   return kErrCode_OK;
 }
