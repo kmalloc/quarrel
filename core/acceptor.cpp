@@ -237,6 +237,8 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
     } else {
       // delayed messages or invalid value id, reject it
       // or try to write to entry that has accepted a value, which mean remote proposer is lag behind.
+      // in latter case, proposer will fail, but gathering peer chosen/accept info will ensure next write
+      // from master will trigger a catchup, since the entry info from the proposal is larger than the acceptor.
       accepted = false;
       accepted_pp = existed_pp.get();
       errcode = kErrCode_INVALID_PROPOSAL_REQ;

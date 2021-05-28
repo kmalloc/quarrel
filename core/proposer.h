@@ -36,6 +36,7 @@ class Proposer {
   // same logic applys for proposing from slave for the moment
   // a potential optimization for this particular case(write from slave) can be achieved by receiving chosen msg from acceptor.
   struct InstanceState {
+    int proposer_id_;
     uint64_t last_chosen_from_;
     uint64_t last_chosen_entry_;
 
@@ -43,8 +44,8 @@ class Proposer {
     IdGen ig_;         // proposal id generator
     IdGenByDate vig_;  // value id generator
 
-    InstanceState(int svrid, int proposer_count)
-        : last_chosen_from_(~0u), last_chosen_entry_(0), ig_(svrid, proposer_count), vig_(0xff, 1) {}
+    InstanceState(int pid, int proposer_count)
+        : proposer_id_(pid), last_chosen_from_(~0u), last_chosen_entry_(0), ig_(pid, proposer_count), vig_(0xff, 1) {}
   };
 
  private:
@@ -63,6 +64,8 @@ class Proposer {
 
   bool UpdatePrepareId(uint64_t pinst, uint64_t pid);
   bool UpdateChosenInfo(uint64_t pinst, uint64_t chosen, uint64_t from);
+
+  bool UpdateLocalStateFromRemoteMsg(std::shared_ptr<PaxosMsg>&);
 
  private:
   std::shared_ptr<ConnMng> conn_;

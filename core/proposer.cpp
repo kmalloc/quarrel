@@ -22,8 +22,26 @@ Proposer::Proposer(std::shared_ptr<Configure> config)
   auto icount = config_->plog_inst_num_;
   auto pcount = config_->total_proposer_;
 
+  std::unique_ptr<PaxosGroupBase> mapper;
+
+  if (pcount == 3) {
+    mapper.reset(new PaxosGroup3);
+  } else if (pcount == 5) {
+    mapper.reset(new PaxosGroup5);
+  } else {
+    assert(0);
+  }
+
+  // acceptor id of master must be the smallest of the quorum.
+  // this ensure one-phase paxos will not succeed in the case of master lagged behind.
+
+  states_.reserve(icount);
   locks_ = std::vector<std::mutex>(icount);
-  states_.resize(icount, InstanceState(svrid, pcount));
+
+  for (auto i = 0ull; i < icount; i++) {
+    auto pid = mapper->GetMemberIdBySvrId(i, svrid);  // proposer id
+    states_.emplace_back(pid, pcount);
+  }
 }
 
 std::shared_ptr<PaxosMsg> Proposer::allocPaxosMsg(uint64_t pinst, uint64_t opaque, uint32_t value_size) {
@@ -81,7 +99,6 @@ int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
   }
 
   if (ret != kErrCode_OK && ret != kErrCode_PREPARE_PEER_VALUE) {
-    // FIXME: handle err && maybe trigger a catchup.
     LOG_ERR << "do prepare failed(" << ret << "), pinst:" << pinst
             << ", entry:" << pp->pentry_ << ", opaque:" << opaque;
     return ret;
@@ -123,10 +140,16 @@ int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
     doChosen(pm);
   } else {
     ret = ret2;
-    // FIXME: handle err && maybe trigger a catchup.
   }
 
   return ret;
+}
+
+bool Proposer::UpdateLocalStateFromRemoteMsg(std::shared_ptr<PaxosMsg>& m) {
+  auto pp = GetProposalFromMsg(m.get());
+  UpdatePrepareId(pp->plid_, pp->pid_);
+  UpdateChosenInfo(pp->plid_, pp->last_chosen_, pp->last_chosen_from_);
+  return true;
 }
 
 bool Proposer::UpdatePrepareId(uint64_t pinst, uint64_t pid) {
@@ -309,8 +332,6 @@ int Proposer::doAccept(std::shared_ptr<PaxosMsg>& pm) {
     }
 
     if (rsp_proposal->status_ != kPaxosState_ACCEPTED) {
-      // FIXME: handle err && maybe trigger a catchup.
-
       UpdatePrepareId(origin_proposal->plid_, rsp_proposal->pid_);
       LOG_ERR << "peer failed to accept, status:" << rsp_proposal->status_
               << ", from:" << m->from_ << " @(" << rsp_proposal->plid_ << ","

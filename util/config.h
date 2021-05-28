@@ -24,7 +24,7 @@ struct Configure {
   uint32_t pid_cookie_{0};
 
   uint32_t total_acceptor_{0};
-  uint32_t total_proposer_{3};  // number of proposers, usally this should be the same as acceptor. this number is used to generate proposal id locally.
+  uint32_t total_proposer_{3};  // number of proposers(3 or 5 for the moment), usally it should be the same as acceptor. this number is used to generate proposal id locally.
   uint32_t pg_type_{PGT_Quorum3};
   uint32_t acceptor_worker_count_{0};
   uint32_t entry_cache_num_{100000};
