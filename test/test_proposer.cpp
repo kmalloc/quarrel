@@ -5,6 +5,7 @@
 #include <chrono>
 #include <future>
 
+#include "plog.h"
 #include "logger.h"
 
 #include "proposer.h"

@@ -47,7 +47,7 @@ class Acceptor {
 
   // broadcast chosen msg
   // used to optimize proposer states
-  using ChosenNotifyFunc = std::function<std::shared_ptr<PaxosMsg>>;
+  using ChosenNotifyFunc = std::function<int(std::shared_ptr<PaxosMsg>)>;
 
   void AddChosenNotify(ChosenNotifyFunc);
 

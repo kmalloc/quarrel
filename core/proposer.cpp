@@ -81,6 +81,7 @@ int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
   }
 
   if (ret != kErrCode_OK && ret != kErrCode_PREPARE_PEER_VALUE) {
+    // FIXME: handle err && maybe trigger a catchup.
     LOG_ERR << "do prepare failed(" << ret << "), pinst:" << pinst
             << ", entry:" << pp->pentry_ << ", opaque:" << opaque;
     return ret;
@@ -122,6 +123,7 @@ int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
     doChosen(pm);
   } else {
     ret = ret2;
+    // FIXME: handle err && maybe trigger a catchup.
   }
 
   return ret;
@@ -307,6 +309,8 @@ int Proposer::doAccept(std::shared_ptr<PaxosMsg>& pm) {
     }
 
     if (rsp_proposal->status_ != kPaxosState_ACCEPTED) {
+      // FIXME: handle err && maybe trigger a catchup.
+
       UpdatePrepareId(origin_proposal->plid_, rsp_proposal->pid_);
       LOG_ERR << "peer failed to accept, status:" << rsp_proposal->status_
               << ", from:" << m->from_ << " @(" << rsp_proposal->plid_ << ","

@@ -196,7 +196,8 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
     // C response with a promise
     // B send accept to C
     // A send accept to C
-    // case 2: proposer proposes to an entry which already accepted a proposal
+    // case 2:
+    // A proposer proposes to an entry which already accepted a proposal
     auto status = existed_pp->status_;
     if (status != kPaxosState_CHOSEN && status != kPaxosState_ACCEPTED) {
       errcode = kErrCode_INVALID_PLOG_DATA;
@@ -235,6 +236,7 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
       }
     } else {
       // delayed messages or invalid value id, reject it
+      // or try to write to entry that has accepted a value, which mean remote proposer is lag behind.
       accepted = false;
       accepted_pp = existed_pp.get();
       errcode = kErrCode_INVALID_PROPOSAL_REQ;

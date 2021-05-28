@@ -2,7 +2,6 @@
 #define __QUARREL_PROPOSER_H_
 
 #include "conn.h"
-#include "plog.h"
 #include "ptype.h"
 #include "config.h"
 
@@ -12,7 +11,6 @@
 #include <mutex>
 #include <vector>
 #include <memory>
-#include <unordered_map>
 
 namespace quarrel {
 
