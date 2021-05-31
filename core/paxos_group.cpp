@@ -4,6 +4,8 @@
 #include <string.h>
 #include <algorithm>
 
+#include "stl.hpp"
+
 namespace quarrel {
 
 template <int M, int N>
@@ -90,6 +92,18 @@ int PaxosGroup5::GetPaxosGroupMember(uint64_t pinst, int* out, int sz) {
   pinst = pinst % 120;
   memcpy(out, mapping_[pinst], 5 * sizeof(int));
   return 5;
+}
+
+std::unique_ptr<PaxosGroupBase> PaxosGroupBase::CreateGroup(int type) {
+  if (type == 3) {
+    return make_unique<PaxosGroup3>();
+  } else if (type == 5) {
+    return make_unique<PaxosGroup5>();
+  } else {
+    assert(0);
+  }
+
+  return 0;
 }
 
 }  // namespace quarrel

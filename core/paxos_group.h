@@ -1,6 +1,7 @@
 #ifndef __QUARREL_PAXOS_GROUP_H_
 #define __QUARREL_PAXOS_GROUP_H_
 
+#include <memory>
 #include <stdint.h>
 
 namespace quarrel {
@@ -8,6 +9,8 @@ namespace quarrel {
 // mapping from svr id to paxos group member id and vice versus
 class PaxosGroupBase {
  public:
+  static std::unique_ptr<PaxosGroupBase> CreateGroup(int type);
+
   virtual int GetMemberIdBySvrId(uint64_t pinst, int id) = 0;
   virtual int GetSvrIdByMemberId(uint64_t pinst, int id) = 0;
   virtual int GetPaxosGroupMember(uint64_t pinst, int* out, int sz) = 0;

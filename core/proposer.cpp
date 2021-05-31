@@ -22,15 +22,7 @@ Proposer::Proposer(std::shared_ptr<Configure> config)
   auto icount = config_->plog_inst_num_;
   auto pcount = config_->total_proposer_;
 
-  std::unique_ptr<PaxosGroupBase> mapper;
-
-  if (pcount == 3) {
-    mapper.reset(new PaxosGroup3);
-  } else if (pcount == 5) {
-    mapper.reset(new PaxosGroup5);
-  } else {
-    assert(0);
-  }
+  auto mapper = PaxosGroupBase::CreateGroup(config_->total_proposer_);
 
   states_.reserve(icount);
   locks_ = std::vector<std::mutex>(icount);
@@ -47,8 +39,14 @@ std::shared_ptr<PaxosMsg> Proposer::allocPaxosMsg(uint64_t pinst, uint64_t opaqu
 
   auto& state = states_[pinst];
 
-  auto pid = state.ig_.GetAndInc();
+  auto pid = 0ull;
   auto entry = state.last_chosen_entry_ + 1;
+
+  if (value_size) {
+    // value size == 0 indicates a read probe.
+    // read probe must not consume proposal id.
+    pid = state.ig_.GetAndInc();
+  }
 
   pm->from_ = config_->local_.id_;
   pm->type_ = kMsgType_PREPARE_REQ;
@@ -100,7 +98,6 @@ bool Proposer::UpdateChosenInfo(uint64_t pinst, uint64_t chosen, uint64_t from) 
   state.ig_.Reset(state.proposer_id_);
 
   state.last_chosen_entry_ = chosen;
-
   state.last_chosen_from_ = uint32_t(from);
 
   return true;
