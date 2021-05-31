@@ -22,15 +22,7 @@ Proposer::Proposer(std::shared_ptr<Configure> config)
   auto icount = config_->plog_inst_num_;
   auto pcount = config_->total_proposer_;
 
-  std::unique_ptr<PaxosGroupBase> mapper;
-
-  if (pcount == 3) {
-    mapper.reset(new PaxosGroup3);
-  } else if (pcount == 5) {
-    mapper.reset(new PaxosGroup5);
-  } else {
-    assert(0);
-  }
+  auto mapper = PaxosGroupBase::CreateGroup(config_->total_proposer_);
 
   states_.reserve(icount);
   locks_ = std::vector<std::mutex>(icount);

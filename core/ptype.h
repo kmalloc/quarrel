@@ -12,9 +12,9 @@
 namespace quarrel {
 
 enum PaxosGroupType {
-  PGT_Quorum3 = 1,
-  PGT_Quorum5,
-  PGT_Quorum64,
+  PGT_Quorum3 = 3,
+  PGT_Quorum5 = 5,
+  PGT_Quorum64 = 64,
 };
 
 enum PaxosState {
