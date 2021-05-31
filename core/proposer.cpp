@@ -167,7 +167,7 @@ bool Proposer::UpdateChosenInfo(uint64_t pinst, uint64_t chosen, uint64_t from) 
     return false;
   }
 
-  state.ig_.Reset(config_->local_.id_);
+  state.ig_.Reset(state.proposer_id_);
 
   state.last_chosen_entry_ = chosen;
   state.last_chosen_from_ = uint32_t(from);
