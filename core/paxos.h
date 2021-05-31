@@ -27,10 +27,7 @@ class Paxos {
   // submit local chosen-proposal to db
   int SubmitChosenProposal(int inst);
 
-  // do catchup by qurying peers.
-  int CatchupFromPeers(int inst);
-
-  // Proose() try to propose a new value.
+  // Propose() try to propose a new value.
   // empty value indicates a read probe, testing whether local is up to date.
   // paxos_inst: the paxos instance to write to, default is 0 for single instance paxos.
   // total number of instances for a quorum is expected to be relativelly small(maybe < 1000).
