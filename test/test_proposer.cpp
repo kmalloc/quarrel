@@ -381,4 +381,6 @@ TEST(proposer, doPropose) {
   ASSERT_GT(prev_entry, 0);
 
   // test #0 proposal optimiazation
+
+  // test read probe
 }
