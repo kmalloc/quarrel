@@ -32,7 +32,7 @@ struct Configure {
 
   uint32_t msg_version_{0};         // msg version
   uint32_t storage_type_{0};        // storage type for plog
-  uint32_t plog_inst_num_{5};       // plog instance count a quorum of servers, usally this should be relatively small, eg 1000?
+  uint32_t plog_inst_num_{3};       // plog instance count a quorum of servers, usally this should be relatively small, eg 1000?
   std::string local_storage_path_;  // storage path
 
   AddrInfo local_;

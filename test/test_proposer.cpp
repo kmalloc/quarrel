@@ -54,6 +54,7 @@ struct DummyLocalConn : public LocalConn {
       rspfp->status_ = kPaxosState_ACCEPTED;
     } else if (req2->type_ == kMsgType_CHOSEN_REQ) {
       chosen_ = true;
+      last_chosen_ = rspfp->pentry_;
       rspfp->status_ = kPaxosState_CHOSEN;
     }
 
@@ -144,6 +145,7 @@ struct DummyRemoteConn : public RemoteConn {
       rpp->status_ = kPaxosState_ACCEPTED;
     } else if (req2->type_ == kMsgType_CHOSEN_REQ) {
       chosen_ = true;
+      last_chosen_ = rpp->pentry_;
       rpp->status_ = kPaxosState_CHOSEN;
     }
 
@@ -306,6 +308,7 @@ TEST(proposer, doPropose) {
   auto p41 = reinterpret_cast<Proposal*>(dr1->accepted_->data_);
   auto p42 = reinterpret_cast<Proposal*>(dr2->accepted_->data_);
   auto p43 = reinterpret_cast<Proposal*>(dlocal->accepted_->data_);
+
   ASSERT_EQ(3, p41->proposer_);
   ASSERT_EQ(3, p42->proposer_);
   ASSERT_EQ(3, p43->proposer_);
@@ -360,5 +363,17 @@ TEST(proposer, doPropose) {
   LOG_INFO << "test accept reject";
   ASSERT_EQ(kErrCode_ACCEPT_NOT_QUORAUM, pp.Propose(0xbadf00d, "dummy value"));
 
-  // #0 proposal optimiazation
+  dr1->rejectAccept_ = false;
+  dr1->rejectPrepare_ = false;
+  dr2->rejectAccept_ = false;
+  dr2->rejectPrepare_ = false;
+
+  // test proposer state
+  ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value"));
+
+  auto pp11 = reinterpret_cast<Proposal*>(dr1->accepted_->data_);
+  auto prev_entry = pp11->pentry_;
+  ASSERT_GT(prev_entry, 0);
+
+  // test #0 proposal optimiazation
 }
