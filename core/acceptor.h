@@ -67,6 +67,8 @@ class Acceptor {
 
   int workerProc(int workerid);
   int doHandleMsg(PaxosRequest req);
+  void doCatchupFromPeer(Proposal& pp);
+  int CheckLocalAndMayTriggerCatchup(const Proposal& pp);
 
  private:
   uint64_t term_;  // logical time

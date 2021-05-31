@@ -28,6 +28,7 @@ enum PaxosState {
   kPaxosState_ACCEPTED_FAILED = 7,
   kPaxosState_COMMIT_FAILED = 8,
   kPaxosState_INVALID_PROPOSAL = 9,
+  kPaxosState_LOCAL_LAG_BEHIND = 10,
 };
 
 enum PaxosMsgType {
@@ -68,7 +69,7 @@ enum PaxosErrCode {
 constexpr int MAX_ACCEPTOR_NUM = 32;
 
 struct Proposal {
-  uint64_t pid_;   // proposal id
+  uint64_t pid_;   // proposal id ,pid == 0 indicates a read probe
   uint64_t term_;  // logical time
 
   uint64_t plid_;        // plog id

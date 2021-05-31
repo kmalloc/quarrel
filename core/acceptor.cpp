@@ -94,6 +94,8 @@ int Acceptor::doHandleMsg(PaxosRequest req) {
   } else if (mtype == kMsgType_CHOSEN_REQ) {
     rsp = handleChosenReq(*pp);
     rsp->type_ = kMsgType_CHOSEN_RSP;
+  } else if (mtype == kMsgType_CHORE_CATCHUP) {
+    doCatchupFromPeer(*pp);
   } else {
     rsp = std::make_shared<PaxosMsg>();
     memcpy(rsp.get(), req.msg_.get(), PaxosMsgHeaderSz);
@@ -115,60 +117,79 @@ int Acceptor::doHandleMsg(PaxosRequest req) {
   return kErrCode_OK;
 }
 
+void Acceptor::doCatchupFromPeer(Proposal& pp) {
+  // FIXME
+  (void)pp;
+}
+
+int Acceptor::CheckLocalAndMayTriggerCatchup(const Proposal& pp) {
+  // FIXME
+  (void)pp;
+  return 0;
+}
+
 std::shared_ptr<PaxosMsg> Acceptor::handlePrepareReq(Proposal& pp) {
   auto pinst = pp.plid_;
   auto entry = pp.pentry_;
   std::shared_ptr<PaxosMsg> rsp;
 
-  // FIXME: check previous entry.
-  // and trigger a catchup if current acceptor lags behind
-
-  auto& ent = pmn_->GetEntryAndCreateIfNotExist(pinst, entry);
-
-  const auto& existed_pp = ent.GetProposal();
-  const auto& existed_promise = ent.GetPromised();
-
   auto vsize = 0;
-  const Proposal* from_pp = NULL;
+  uint32_t errcode = 0;
+  const Proposal* from_pp = &pp;
   int status = kPaxosState_PROMISED;
 
-  uint32_t errcode = 0;
+  // trigger a catchup if current acceptor lags behind
+  auto ret = CheckLocalAndMayTriggerCatchup(pp);
+  if (ret) {
+    errcode = ret;
+    status = kPaxosState_LOCAL_LAG_BEHIND;
+  } else {
+    auto& ent = pmn_->GetEntryAndCreateIfNotExist(pinst, entry);
+    const auto& existed_pp = ent.GetProposal();
+    const auto& existed_promise = ent.GetPromised();
 
-  if (existed_pp) {
+    if (existed_pp) {
       // largest last vote
       vsize = existed_pp->size_;
       from_pp = existed_pp.get();
       status = kPaxosState_ACCEPTED;
-  } else if (existed_promise && existed_promise->pid_ >= pp.pid_) {
+    } else if (existed_promise && existed_promise->pid_ >= pp.pid_) {
       // reject for previous promise
       vsize = existed_promise->size_;
       from_pp = existed_promise.get();
-  } else {
-    // a new proposal request
-    from_pp = &pp;
-    vsize = pp.size_;
-    pp.status_ = kPaxosState_PROMISED;
-    auto ret = pmn_->SetPromised(pp);
-    if (ret != kErrCode_OK) {
-      vsize = 0;
-      errcode = kErrCode_WRITE_PLOG_FAIL;
-      status = kPaxosState_PROMISED_FAILED;
     } else {
-      pp.status_ = kPaxosState_PREPARED;
+      // a new proposal request
+      vsize = pp.size_;
+      if (pp.pid_ > 0) {
+        pp.status_ = kPaxosState_PROMISED;
+        ret = pmn_->SetPromised(pp);
+      } else {
+        // pid == 0 indicates a read probe.
+      }
+
+      if (ret != kErrCode_OK) {
+        vsize = 0;
+        errcode = kErrCode_WRITE_PLOG_FAIL;
+        status = kPaxosState_PROMISED_FAILED;
+      } else {
+        pp.status_ = kPaxosState_PREPARED;
+      }
     }
   }
 
-  auto ret = AllocProposalMsg(vsize);
-  auto rpp = GetProposalFromMsg(ret.get());
+  rsp = AllocProposalMsg(vsize);
 
-  ret->errcode_ = errcode;
-  ret->type_ = kMsgType_PREPARE_RSP;
+  rsp->errcode_ = errcode;
+  rsp->type_ = kMsgType_PREPARE_RSP;
+  auto rpp = GetProposalFromMsg(rsp.get());
+
   memcpy(rpp, from_pp, ProposalHeaderSz + vsize);
+
   rpp->status_ = status;
   rpp->last_chosen_ = pmn_->GetMaxChosenEntry(pinst);
   rpp->last_chosen_from_ = uint16_t(~0u);
 
-  return std::move(ret);
+  return std::move(rsp);
 }
 
 std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
@@ -176,8 +197,17 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
   auto entry = pp.pentry_;
   std::shared_ptr<PaxosMsg> rsp;
 
-  // FIXME: check previous entry.
-  // and trigger a catchup if current acceptor lags behind
+  rsp = AllocProposalMsg(0);
+  auto rpp = GetProposalFromMsg(rsp.get());
+  rsp->type_ = kMsgType_ACCEPT_RSP;
+
+  // trigger a catchup if current acceptor lags behind
+  auto ret = CheckLocalAndMayTriggerCatchup(pp);
+  if (ret) {
+    rsp->errcode_ = ret;
+    rpp->status_ = kPaxosState_LOCAL_LAG_BEHIND;
+    return std::move(rsp);
+  }
 
   auto& ent = pmn_->GetEntryAndCreateIfNotExist(pinst, entry);
 
@@ -265,17 +295,13 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
     // FIXME: #0 proposal optimization.
   }
 
-  auto ret = AllocProposalMsg(0);
-  auto rpp = GetProposalFromMsg(ret.get());
-
   memcpy(rpp, accepted_pp, ProposalHeaderSz);
 
   rpp->size_ = 0;
   rpp->last_chosen_from_ = uint16_t(~0u);
   rpp->last_chosen_ = pmn_->GetMaxChosenEntry(pinst);
 
-  ret->errcode_ = errcode;
-  ret->type_ = kMsgType_ACCEPT_RSP;
+  rsp->errcode_ = errcode;
 
   if (accepted) {
     // clear promised
@@ -285,7 +311,7 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
     rpp->status_ = kPaxosState_ACCEPTED_FAILED;
   }
 
-  return ret;
+  return std::move(rsp);
 }
 
 std::shared_ptr<PaxosMsg> Acceptor::handleChosenReq(Proposal& pp) {

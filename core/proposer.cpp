@@ -32,15 +32,12 @@ Proposer::Proposer(std::shared_ptr<Configure> config)
     assert(0);
   }
 
-  // acceptor id of master must be the smallest of the quorum.
-  // this ensure one-phase paxos will not succeed in the case of master lagged behind.
-
   states_.reserve(icount);
   locks_ = std::vector<std::mutex>(icount);
 
   for (auto i = 0ull; i < icount; i++) {
     auto pid = mapper->GetMemberIdBySvrId(i, svrid);  // proposer id
-    states_.emplace_back(pid, pcount);
+    states_.emplace_back(pid + 1, pcount);
   }
 }
 
@@ -74,6 +71,133 @@ std::shared_ptr<PaxosMsg> Proposer::allocPaxosMsg(uint64_t pinst, uint64_t opaqu
   return pm;
 }
 
+bool Proposer::UpdateLocalStateFromRemoteMsg(std::shared_ptr<PaxosMsg>& m) {
+  auto pp = GetProposalFromMsg(m.get());
+  UpdatePrepareId(pp->plid_, pp->pid_);
+  UpdateChosenInfo(pp->plid_, pp->last_chosen_, pp->last_chosen_from_);
+  return true;
+}
+
+bool Proposer::UpdatePrepareId(uint64_t pinst, uint64_t pid) {
+  auto& state = states_[pinst];
+  state.ig_.SetGreaterThan(pid);
+  return true;
+}
+
+bool Proposer::UpdateChosenInfo(uint64_t pinst, uint64_t chosen, uint64_t from) {
+  auto& state = states_[pinst];
+
+  if (chosen == 0 || chosen == ~0ull) {
+    return false;
+  }
+
+  if (chosen < state.last_chosen_entry_) {
+    LOG_ERR << "local chosen entry > new chosen, pinst:" << pinst << ", current chosen:"
+            << state.last_chosen_entry_ << ", new chosen:" << chosen << ", from:" << from;
+    return false;
+  }
+
+  state.ig_.Reset(state.proposer_id_);
+
+  state.last_chosen_entry_ = chosen;
+
+  state.last_chosen_from_ = uint32_t(from);
+
+  return true;
+}
+
+int Proposer::onChosenNotify(std::shared_ptr<PaxosMsg> msg) {
+  auto pp = GetProposalFromMsg(msg.get());
+
+  auto pinst = pp->plid_;
+  std::lock_guard<std::mutex> l(locks_[pinst]);
+
+  // external chosen notify is only allowed for master.
+  // to make sure that slave will not allow one-phase proposing after recover.
+
+  if (states_[pinst].proposer_id_ != 0) {
+    // proposer id 0 indicates master
+    return -1;
+  }
+
+  UpdateChosenInfo(pinst, pp->pentry_, pp->proposer_);
+  return 0;
+}
+
+bool Proposer::canSkipPrepare(const Proposal& pp) {
+  //1. proposer of last entry(which consensus is reached)
+  //2. #0 proposal for current entry.
+  auto pinst = pp.plid_;
+  auto entry = pp.pentry_;
+  const auto& state = states_[pinst % states_.size()];
+
+  // acceptor id of master must be the smallest of the quorum.
+  // this ensure one-phase paxos will not succeed in the case of lagged-behind master try to propose to an entry which already has accepted value in remote peers.
+  // consider following case
+  // master: |v1|v2|| slave1: |v1|v2|v3| slave2: |v1|v2|v3|
+  // v1/v2 is proposed by master, then master crashed, v3 is proposed by slave1, and reach majority consensus.
+  // then master recover, and trys to propose v4 to entry 3.
+  // at this moment master still considers itself master(because v2 is proposed by itself), and try one-phased proposing,
+  // which will fail because the proposal id will be rejected.
+
+  // what about slave2 proposing after recovering from crash?
+  // consider following case
+  // master: |v1|v2|v3| slave1: |v1|v2|v3| slave2: |v1|v2||
+  // v1 is proposed by master, then for some reason, slave2 proposes v2 by two-phase proposing.
+  // then slave2 crashed, master then proposed v3 using two-phase proposing and reached global consensus.
+  // then slave3 recovered, slave3 finds that v2 was proposed by itself, but this time slave3 must not be allowed to use one-phase proposing.
+  // so we must ensure that slave will not do one-phase proposing for its very first proposal after recovering.
+  // we can do that by just setting last_chosen_from_ to an invalid value when initializing slave;
+
+  // currently all last_chosen_from_ is initialized to 0 at startup, which means both master and slave will do 2-phase proposing for the first proposal after recovering.
+  // in the case of master startup, there is room for optimization, just make sure above rule is followed.
+
+  if (state.last_chosen_entry_ == entry - 1 && state.last_chosen_from_ == state.proposer_id_ && pp.pid_ == state.proposer_id_ + 1) {
+    return true;
+  }
+
+  return false;
+}
+
+std::shared_ptr<BatchRpcContext> Proposer::doBatchRpcRequest(
+    int majority, std::shared_ptr<PaxosMsg>& pm) {
+  // shared objects must be put on heap.
+  // so that when a delayed msg arrives, there won't be any memory access
+  // violation
+  auto ctx = std::make_shared<BatchRpcContext>(majority);
+
+  auto cb = [ctx](std::shared_ptr<PaxosMsg> msg) -> int {
+    // delayed rsp will be ignored.
+    auto idx = ctx->rsp_count_.fetch_add(1);
+    ctx->rsp_msg_[idx] = std::move(msg);
+    ctx->wg_.Notify();
+    return 0;
+  };
+
+  ctx->ret_ = kErrCode_OK;
+  auto pinst = GetPLIdFromMsg(pm.get());
+  auto& local = conn_->GetLocalConn();
+  auto& remote = conn_->GetRemoteConn(pinst);
+
+  RpcReqData req{config_->timeout_, std::move(cb), pm};
+
+  auto ret = 0;
+  if ((ret = local->DoRpcRequest(req))) {
+    ctx->ret_ = ret;
+    return std::move(ctx);
+  }
+
+  for (auto i = 0u; i < remote.size(); ++i) {
+    remote[i]->DoRpcRequest(req);
+  }
+
+  if (!ctx->wg_.Wait(config_->timeout_)) {
+    ctx->ret_ = kErrCode_TIMEOUT;
+  }
+
+  return ctx;
+}
+
 int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
   assert(conn_);
 
@@ -83,7 +207,7 @@ int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
   auto pm = allocPaxosMsg(pinst, opaque, uint32_t(val.size()));
   if (!pm) return kErrCode_OOM;
 
-  int ret = 0;
+  int ret = kErrCode_OK;
   auto pp = reinterpret_cast<Proposal*>(pm->data_);
   auto entry = pp->pentry_;
 
@@ -93,8 +217,8 @@ int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
   pp->size_ -= uint32_t(val.size());
   pm->size_ -= uint32_t(val.size());
 
-  if (val.empty() || !canSkipPrepare(pinst, pp->pentry_)) {
-    // empty val indicates a read probe which must always perform
+  if (val.empty() || !canSkipPrepare(*pp)) {
+    // empty val indicates a read probe which must always perform prepare()
     ret = doPrepare(pm);
   }
 
@@ -143,92 +267,6 @@ int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
   }
 
   return ret;
-}
-
-bool Proposer::UpdateLocalStateFromRemoteMsg(std::shared_ptr<PaxosMsg>& m) {
-  auto pp = GetProposalFromMsg(m.get());
-  UpdatePrepareId(pp->plid_, pp->pid_);
-  UpdateChosenInfo(pp->plid_, pp->last_chosen_, pp->last_chosen_from_);
-  return true;
-}
-
-bool Proposer::UpdatePrepareId(uint64_t pinst, uint64_t pid) {
-  auto& state = states_[pinst];
-  state.ig_.SetGreaterThan(pid);
-  return true;
-}
-
-bool Proposer::UpdateChosenInfo(uint64_t pinst, uint64_t chosen, uint64_t from) {
-  auto& state = states_[pinst];
-
-  if (chosen < state.last_chosen_entry_) {
-    LOG_ERR << "local chosen entry > new chosen, pinst:" << pinst << ", current chosen:"
-            << state.last_chosen_entry_ << ", new chosen:" << chosen << ", from:" << from;
-    return false;
-  }
-
-  state.ig_.Reset(config_->local_.id_);
-
-  state.last_chosen_from_ = from;
-  state.last_chosen_entry_ = chosen;
-  return true;
-}
-
-int Proposer::onChosenNotify(std::shared_ptr<PaxosMsg> msg) {
-  auto pp = GetProposalFromMsg(msg.get());
-  std::lock_guard<std::mutex> l(locks_[pp->plid_]);
-  UpdateChosenInfo(pp->plid_, pp->pentry_, pp->proposer_);
-  return 0;
-}
-
-bool Proposer::canSkipPrepare(uint64_t pinst, uint64_t entry) {
-  // TODO
-  // optimizations to follow:
-  // 1. #0 proposal opmitization.
-  // 2. or master optimization.
-  // 3. batch request for multiple paxos entry.
-  (void)pinst;
-  (void)entry;
-  return false;
-}
-
-std::shared_ptr<BatchRpcContext> Proposer::doBatchRpcRequest(
-    int majority, std::shared_ptr<PaxosMsg>& pm) {
-  // shared objects must be put on heap.
-  // so that when a delayed msg arrives, there won't be any memory access
-  // violation
-  auto ctx = std::make_shared<BatchRpcContext>(majority);
-
-  auto cb = [ctx](std::shared_ptr<PaxosMsg> msg) -> int {
-    // delayed rsp will be ignored.
-    auto idx = ctx->rsp_count_.fetch_add(1);
-    ctx->rsp_msg_[idx] = std::move(msg);
-    ctx->wg_.Notify();
-    return 0;
-  };
-
-  ctx->ret_ = kErrCode_OK;
-  auto pinst = GetPLIdFromMsg(pm.get());
-  auto& local = conn_->GetLocalConn();
-  auto& remote = conn_->GetRemoteConn(pinst);
-
-  RpcReqData req{config_->timeout_, std::move(cb), pm};
-
-  auto ret = 0;
-  if ((ret = local->DoRpcRequest(req))) {
-    ctx->ret_ = ret;
-    return std::move(ctx);
-  }
-
-  for (auto i = 0u; i < remote.size(); ++i) {
-    remote[i]->DoRpcRequest(req);
-  }
-
-  if (!ctx->wg_.Wait(config_->timeout_)) {
-    ctx->ret_ = kErrCode_TIMEOUT;
-  }
-
-  return ctx;
 }
 
 int Proposer::doPrepare(std::shared_ptr<PaxosMsg>& pm) {

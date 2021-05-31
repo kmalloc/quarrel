@@ -36,8 +36,8 @@ class Proposer {
   // same logic applys for proposing from slave for the moment
   // a potential optimization for this particular case(write from slave) can be achieved by receiving chosen msg from acceptor.
   struct InstanceState {
-    int proposer_id_;
-    uint64_t last_chosen_from_;
+    uint32_t proposer_id_;  // proposer id for current proposer, this is varied for each instance.
+    uint32_t last_chosen_from_;
     uint64_t last_chosen_entry_;
 
     // idgen will be reset when the latest entry is chosen
@@ -56,7 +56,7 @@ class Proposer {
   // update paxos instance states for chosen entry by remote peers.
   int onChosenNotify(std::shared_ptr<PaxosMsg> msg);
 
-  bool canSkipPrepare(uint64_t pinst, uint64_t entry);
+  bool canSkipPrepare(const Proposal&);
   std::shared_ptr<PaxosMsg> allocPaxosMsg(uint64_t pinst, uint64_t opaque,
                                           uint32_t value_size);
   std::shared_ptr<BatchRpcContext> doBatchRpcRequest(
