@@ -216,6 +216,7 @@ TEST(proposer, doPropose) {
   auto p12 = reinterpret_cast<Proposal*>(dr2->accepted_->data_);
   auto p13 = reinterpret_cast<Proposal*>(dlocal->accepted_->data_);
 
+  ASSERT_EQ(1, p11->pentry_);
   ASSERT_EQ(config->local_.id_, p11->proposer_);
   ASSERT_EQ(kPaxosState_ACCEPTED, p11->status_);
   ASSERT_EQ(11, p11->size_);
@@ -235,6 +236,7 @@ TEST(proposer, doPropose) {
   auto p22 = reinterpret_cast<Proposal*>(dr2->accepted_->data_);
   auto p23 = reinterpret_cast<Proposal*>(dlocal->accepted_->data_);
 
+  ASSERT_EQ(2, p21->pentry_);
   ASSERT_EQ(config->local_.id_, p21->proposer_);
   ASSERT_EQ(kPaxosState_ACCEPTED, p21->status_);
   ASSERT_EQ(11, p21->size_);
@@ -269,6 +271,7 @@ TEST(proposer, doPropose) {
   auto p32 = reinterpret_cast<Proposal*>(dr2->accepted_->data_);
   auto p33 = reinterpret_cast<Proposal*>(dlocal->accepted_->data_);
 
+  ASSERT_EQ(3, p31->pentry_);
   ASSERT_EQ(2, p31->proposer_);
   ASSERT_EQ(2, p32->proposer_);
   ASSERT_EQ(2, p33->proposer_);
