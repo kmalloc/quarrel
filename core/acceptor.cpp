@@ -160,8 +160,13 @@ std::shared_ptr<PaxosMsg> Acceptor::handlePrepareReq(Proposal& pp) {
     } else {
       // a new proposal request
       vsize = pp.size_;
-      pp.status_ = kPaxosState_PROMISED;
-      ret = pmn_->SetPromised(pp);
+      if (pp.pid_ > 0) {
+        pp.status_ = kPaxosState_PROMISED;
+        ret = pmn_->SetPromised(pp);
+      } else {
+        // pid == 0 indicates a read probe.
+      }
+
       if (ret != kErrCode_OK) {
         vsize = 0;
         errcode = kErrCode_WRITE_PLOG_FAIL;

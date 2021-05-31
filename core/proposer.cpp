@@ -40,7 +40,7 @@ Proposer::Proposer(std::shared_ptr<Configure> config)
 
   for (auto i = 0ull; i < icount; i++) {
     auto pid = mapper->GetMemberIdBySvrId(i, svrid);  // proposer id
-    states_.emplace_back(pid, pcount);
+    states_.emplace_back(pid + 1, pcount);
   }
 }
 
@@ -83,7 +83,7 @@ int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
   auto pm = allocPaxosMsg(pinst, opaque, uint32_t(val.size()));
   if (!pm) return kErrCode_OOM;
 
-  int ret = 0;
+  int ret = kErrCode_OK;
   auto pp = reinterpret_cast<Proposal*>(pm->data_);
   auto entry = pp->pentry_;
 
@@ -93,8 +93,8 @@ int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
   pp->size_ -= uint32_t(val.size());
   pm->size_ -= uint32_t(val.size());
 
-  if (val.empty() || !canSkipPrepare(pinst, pp->pentry_)) {
-    // empty val indicates a read probe which must always perform
+  if (val.empty() || !canSkipPrepare(*pp)) {
+    // empty val indicates a read probe which must always perform prepare()
     ret = doPrepare(pm);
   }
 
@@ -169,8 +169,8 @@ bool Proposer::UpdateChosenInfo(uint64_t pinst, uint64_t chosen, uint64_t from) 
 
   state.ig_.Reset(config_->local_.id_);
 
-  state.last_chosen_from_ = from;
   state.last_chosen_entry_ = chosen;
+  state.last_chosen_from_ = uint32_t(from);
   return true;
 }
 
@@ -181,14 +181,17 @@ int Proposer::onChosenNotify(std::shared_ptr<PaxosMsg> msg) {
   return 0;
 }
 
-bool Proposer::canSkipPrepare(uint64_t pinst, uint64_t entry) {
-  // TODO
-  // optimizations to follow:
-  // 1. #0 proposal opmitization.
-  // 2. or master optimization.
-  // 3. batch request for multiple paxos entry.
-  (void)pinst;
-  (void)entry;
+bool Proposer::canSkipPrepare(const Proposal& pp) {
+  //1. proposer of last entry(which consensus is reached)
+  //2. #0 proposal for current entry.
+  auto pinst = pp.plid_;
+  auto entry = pp.pentry_;
+  const auto& state = states_[pinst % states_.size()];
+
+  if (state.last_chosen_entry_ == entry - 1 && state.last_chosen_from_ == state.proposer_id_ && pp.pid_ == state.proposer_id_ + 1) {
+    return true;
+  }
+
   return false;
 }
 
