@@ -87,6 +87,10 @@ bool Proposer::UpdatePrepareId(uint64_t pinst, uint64_t pid) {
 bool Proposer::UpdateChosenInfo(uint64_t pinst, uint64_t chosen, uint64_t from) {
   auto& state = states_[pinst];
 
+  if (chosen == 0 || chosen == ~0ull) {
+    return false;
+  }
+
   if (chosen < state.last_chosen_entry_) {
     LOG_ERR << "local chosen entry > new chosen, pinst:" << pinst << ", current chosen:"
             << state.last_chosen_entry_ << ", new chosen:" << chosen << ", from:" << from;

@@ -369,6 +369,8 @@ TEST(proposer, doPropose) {
   dr2->rejectPrepare_ = false;
 
   // test proposer state
+
+  LOG_INFO << "testing proposer state handling";
   ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value"));
 
   auto pp11 = reinterpret_cast<Proposal*>(dr1->accepted_->data_);
