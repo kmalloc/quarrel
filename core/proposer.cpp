@@ -48,7 +48,7 @@ std::shared_ptr<PaxosMsg> Proposer::allocPaxosMsg(uint64_t pinst, uint64_t opaqu
     pid = state.ig_.GetAndInc();
   }
 
-  pm->from_ = config_->local_.id_;
+  pm->from_ = config_->local_.id_;  // this is server id not proposer id.
   pm->type_ = kMsgType_PREPARE_REQ;
   pm->version_ = config_->msg_version_;
 
@@ -106,7 +106,7 @@ bool Proposer::UpdateChosenInfo(uint64_t pinst, uint64_t chosen, uint64_t from) 
 int Proposer::onChosenNotify(std::shared_ptr<PaxosMsg> msg) {
   auto pp = GetProposalFromMsg(msg.get());
 
-  auto pinst = pp->plid_;
+  auto pinst = pp->plid_ % locks_.size();
   std::lock_guard<std::mutex> l(locks_[pinst]);
 
   // external chosen notify is only allowed for master.

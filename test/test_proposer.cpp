@@ -7,6 +7,7 @@
 
 #include "plog.h"
 #include "logger.h"
+#include "paxos_group.h"
 
 #include "proposer.h"
 
@@ -168,11 +169,10 @@ TEST(proposer, doPropose) {
   auto config = std::make_shared<Configure>();
   config->timeout_ = 8;  // 8ms
   config->pid_cookie_ = 8; // prepare id > 8
-  config->local_ = {1, ConnType_LOCAL, "xxxx:yyy"};
+  config->local_ = {0, ConnType_LOCAL, "xxxx:yyy"};
   config->plog_inst_num_ = 5;
-  config->total_acceptor_ = 3;
-  config->peer_.push_back({2, ConnType_REMOTE, "aaaa:bb"});
-  config->peer_.push_back({3, ConnType_REMOTE, "aaaa2:bb2"});
+  config->peer_.push_back({1, ConnType_REMOTE, "aaaa:bb"});
+  config->peer_.push_back({2, ConnType_REMOTE, "aaaa2:bb2"});
 
   Proposer pp(config);
   auto mapper = std::make_shared<PaxosGroup3>();
@@ -260,9 +260,9 @@ TEST(proposer, doPropose) {
 
   ASSERT_EQ(kErrCode_PREPARE_PEER_VALUE, pp.Propose(0xbadf00d, "dummy value"));
 
-  ASSERT_EQ(1, dr1->accepted_->from_);
-  ASSERT_EQ(1, dr2->accepted_->from_);
-  ASSERT_EQ(1, dlocal->accepted_->from_);
+  ASSERT_EQ(0, dr1->accepted_->from_);
+  ASSERT_EQ(0, dr2->accepted_->from_);
+  ASSERT_EQ(0, dlocal->accepted_->from_);
   ASSERT_EQ(kMsgType_ACCEPT_REQ, dr1->accepted_->type_);
   ASSERT_EQ(kMsgType_ACCEPT_REQ, dr2->accepted_->type_);
   ASSERT_EQ(kMsgType_ACCEPT_REQ, dlocal->accepted_->type_);
@@ -373,12 +373,37 @@ TEST(proposer, doPropose) {
 
   // test proposer state
 
+  auto mp = PaxosGroupBase::CreateGroup(3);
   LOG_INFO << "testing proposer state handling";
   ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value"));
 
   auto pp11 = reinterpret_cast<Proposal*>(dr1->accepted_->data_);
   auto prev_entry = pp11->pentry_;
   ASSERT_GT(prev_entry, 0);
+  ASSERT_EQ(prev_entry - 1, pp11->last_chosen_);
+  ASSERT_EQ(0, pp11->last_chosen_from_);
+
+  ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value"));
+
+  auto pp12 = reinterpret_cast<Proposal*>(dr1->accepted_->data_);
+  auto prev_entry2 = pp12->pentry_;
+
+  ASSERT_EQ(prev_entry + 1, prev_entry2);
+  ASSERT_EQ(prev_entry, pp12->last_chosen_);
+  ASSERT_EQ(0, pp12->last_chosen_from_);
+  ASSERT_EQ(1, pp12->pid_);
+
+  // two phase
+  ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value", 2));
+  auto pp13 = reinterpret_cast<Proposal*>(dr1->accepted_->data_);
+  ASSERT_EQ(1, pp13->pentry_);
+  ASSERT_EQ(uint16_t(~0u), pp13->last_chosen_from_);
+
+  ASSERT_GT(pp13->pid_, 1);
+  ASSERT_EQ(mp->GetMemberIdBySvrId(2, config->local_.id_) + 1, pp13->pid_);
+
+  // one phase
+  ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value", 2));
 
   // test #0 proposal optimiazation
 
