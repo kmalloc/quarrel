@@ -107,16 +107,16 @@ bool Proposer::UpdateChosenInfo(uint64_t pinst, uint64_t chosen, uint64_t from) 
   return true;
 }
 
-int Proposer::onChosenNotify(std::shared_ptr<PaxosMsg> msg) {
+int Proposer::HandleChosenNotify(std::shared_ptr<PaxosMsg> msg, bool from_plog) {
   auto pp = GetProposalFromMsg(msg.get());
 
   auto pinst = pp->plid_ % locks_.size();
   std::lock_guard<std::mutex> l(locks_[pinst]);
 
-  // external chosen notify is only allowed for master.
+  // external chosen notify from plog is only allowed for master.
   // to make sure that slave will not allow one-phase proposing after recover.
 
-  if (states_[pinst].proposer_id_ != 0) {
+  if (from_plog && states_[pinst].proposer_id_ != 0) {
     // proposer id 0 indicates master
     return -1;
   }

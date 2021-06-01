@@ -29,6 +29,11 @@ class Proposer {
   // TODO, one prepare for mulitple consecutive entry slots
   int ProposeBatch(uint64_t opaque, const std::vector<std::string>& vals, uint64_t pinst);
 
+  // update paxos instance states for chosen entry:
+  // 1. chosen entry recovered from plog, just for the last chosen entry.
+  // 2. entry written by remote peers, this is used to optimize first-write from slave.
+  int HandleChosenNotify(std::shared_ptr<PaxosMsg> msg, bool from_plog = false);
+
  private:
   // in-memory state of each paxos instance.
   // the very first proposal for each instance at startup requires a second try.
@@ -52,9 +57,6 @@ class Proposer {
   int doAccept(std::shared_ptr<PaxosMsg>& p);
   int doPrepare(std::shared_ptr<PaxosMsg>& p);
   int doChosen(std::shared_ptr<PaxosMsg>& p);
-
-  // update paxos instance states for chosen entry by remote peers.
-  int onChosenNotify(std::shared_ptr<PaxosMsg> msg);
 
   bool canSkipPrepare(const Proposal&);
   std::shared_ptr<PaxosMsg> allocPaxosMsg(uint64_t pinst, uint64_t opaque,
