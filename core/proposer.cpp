@@ -231,7 +231,7 @@ int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
 
   if (ret != kErrCode_OK && ret != kErrCode_PREPARE_PEER_VALUE) {
     LOG_ERR << "do prepare failed(" << ret << "), pinst:" << pinst
-            << ", entry:" << pp->pentry_ << ", opaque:" << opaque;
+            << ", entry:" << pp->pentry_ << ", vsz:" << val.size() << ", opaque:" << opaque;
     return ret;
   }
 

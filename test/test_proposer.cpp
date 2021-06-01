@@ -48,7 +48,9 @@ struct DummyLocalConn : public LocalConn {
     if ((rejectAccept_ && req2->type_ == kMsgType_ACCEPT_REQ) ||
         (rejectPrepare_ && req2->type_ == kMsgType_PREPARE_REQ)) {
       auto pp = GetProposalFromMsg(rsp.get());
-
+      pp->pid_ = pp2->pid_ + 1;
+    } else if (rejectReadProbe_ && req2->type_ == kMsgType_PREPARE_REQ) {
+      auto pp = GetProposalFromMsg(rsp.get());
       pp->pid_ = pp2->pid_ + 1;
     }
 
@@ -79,6 +81,7 @@ struct DummyLocalConn : public LocalConn {
   bool chosen_{false};
   bool rejectPrepare_{false};
   bool rejectAccept_{false};
+  bool rejectReadProbe_{false};
 
   std::shared_ptr<PaxosMsg> accepted_;
   std::shared_ptr<PaxosMsg> promised_;
@@ -144,6 +147,9 @@ struct DummyRemoteConn : public RemoteConn {
       auto pp2 = GetProposalFromMsg(req2.get());
       rpp->pid_ = pp2->pid_ + 1;
       // rpp->status_ = kPaxosState_PROMISED_FAILED;
+    } else if (rejectReadProbe_ && req2->type_ == kMsgType_PREPARE_REQ) {
+      auto pp2 = GetProposalFromMsg(req2.get());
+      rpp->pid_ = pp2->pid_ + 1;
     }
 
     if (req2->type_ == kMsgType_PREPARE_REQ) {
@@ -168,6 +174,7 @@ struct DummyRemoteConn : public RemoteConn {
   bool chosen_{false};
   bool rejectPrepare_{false};
   bool rejectAccept_{false};
+  bool rejectReadProbe_{false};
 
   std::shared_ptr<PaxosMsg> accepted_;
   std::shared_ptr<PaxosMsg> promised_;
@@ -414,10 +421,40 @@ TEST(proposer, doPropose) {
   ASSERT_EQ(mp->GetMemberIdBySvrId(2, config->local_.id_) + 1, pp13->pid_);
 
   // one phase
-  ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value", 2));
+  ASSERT_EQ(kErrCode_OK, pp.Propose(233, "dummy value", 2));
+  auto pp14 = reinterpret_cast<Proposal*>(dr1->accepted_->data_);
+  ASSERT_EQ(1 + pp13->pentry_, pp14->pentry_);
+  ASSERT_EQ(233 + 1, pp14->opaque_);
 
-  // test #0 proposal optimiazation
+  // reject one phase accept
+  dr1->rejectAccept_ = true;
+  ASSERT_EQ(kErrCode_OK, pp.Propose(233, "dummy value", 2));
+  auto pp15 = reinterpret_cast<Proposal*>(dr1->accepted_->data_);
+  ASSERT_EQ(1 + pp14->pentry_, pp15->pentry_);
+  ASSERT_EQ(233 + 1, pp15->opaque_);
 
+  dr1->rejectAccept_ = true;
+  dr2->rejectAccept_ = true;
+  ASSERT_EQ(kErrCode_ACCEPT_NOT_QUORAUM, pp.Propose(233, "dummy value", 2));
+  auto pp16 = reinterpret_cast<Proposal*>(dr1->accepted_->data_);
+  ASSERT_EQ(1 + pp15->pentry_, pp16->pentry_);
+  ASSERT_EQ(233 + 1, pp16->opaque_);
+
+    //  two phase
+  dr1->rejectAccept_ = false;
+  dr2->rejectAccept_ = false;
+  ASSERT_EQ(kErrCode_OK, pp.Propose(233, "dummy value", 2));
+  auto pp17 = reinterpret_cast<Proposal*>(dr1->accepted_->data_);
+  ASSERT_EQ(pp16->pentry_, pp17->pentry_);
+  ASSERT_EQ(233 + 2, pp17->opaque_);
 
   // test read probe
+
+  ASSERT_EQ(kErrCode_OK, pp.Propose(233, "", 2));
+  ASSERT_EQ(kErrCode_OK, pp.Propose(233, "dummy value", 2));
+
+  dr1->rejectReadProbe_ = true;
+  ASSERT_EQ(kErrCode_OK, pp.Propose(233, "", 2));
+  dr2->rejectReadProbe_ = true;
+  ASSERT_EQ(kErrCode_PREPARE_NOT_QUORAUM, pp.Propose(233, "", 2));
 }
