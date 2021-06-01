@@ -26,7 +26,7 @@ struct Configure {
   uint32_t quorum_id_{0};  // not used for the memoment, allocated globally for every quorum, client use quorum count to route request.
   uint32_t total_acceptor_{3};
   uint32_t total_proposer_{3};  // number of proposers(3 or 5 for the moment), usally it should be the same as acceptor. this number is used to generate proposal id locally.
-  uint32_t pg_type_{PGT_Quorum3};  // must be configure accordingly with total_acceptor_
+  uint32_t pg_type_{PGT_Quorum3};  // must be configured accordingly with total_acceptor_
   uint32_t acceptor_worker_count_{0};
   uint32_t entry_cache_num_{100000};
   uint32_t worker_msg_queue_sz_{10000};

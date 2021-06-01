@@ -98,10 +98,9 @@ bool Proposer::UpdateChosenInfo(uint64_t pinst, uint64_t chosen, uint64_t from) 
   /*
   LOG_ERR << "local chosen entry updated, pinst:" << pinst << ", current chosen:"
           << state.last_chosen_entry_ << ", new chosen:" << chosen << ", from:" << from;
-          */
+  */
 
   state.ig_.Reset(state.proposer_id_ + 1);
-
   state.last_chosen_entry_ = chosen;
   state.last_chosen_from_ = uint32_t(from);
 
@@ -158,7 +157,7 @@ bool Proposer::canSkipPrepare(const Proposal& pp) {
   LOG_INFO << "check skip prepare, last chosen:" << state.last_chosen_entry_
            << ", last from:" << state.last_chosen_from_ << ", inst:" << pinst << ", entry:" << entry
            << ", proposer id:" << state.proposer_id_ << ", pid:" << pp.pid_;
-           */
+  */
 
   if (state.last_chosen_entry_ == entry - 1 && state.last_chosen_from_ == uint32_t(config_->local_.id_) && pp.pid_ == state.proposer_id_ + 1) {
     return true;
