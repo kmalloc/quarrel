@@ -35,12 +35,19 @@ struct DummyLocalConn : public LocalConn {
       rspfp->pid_ = reqfp->pid_ - addr_.id_;
       rspfp->value_id_ = reqfp->value_id_ + 1;
       rsp = std::move(fake_rsp_);
+      LOG_INFO << "acceptor(" << addr_.id_
+               << ") from local returns last vote, req pid:" << reqfp->pid_
+               << ", rsp pid:" << rspfp->pid_ << ", req vsz:" << reqfp->size_
+               << ", rsp vsz:" << rspfp->size_
+               << ", req vid:" << rspfp->value_id_
+               << ", rsp vid:" << rspfp->value_id_;
     }
+
+    auto pp2 = GetProposalFromMsg(req2.get());
 
     if ((rejectAccept_ && req2->type_ == kMsgType_ACCEPT_REQ) ||
         (rejectPrepare_ && req2->type_ == kMsgType_PREPARE_REQ)) {
       auto pp = GetProposalFromMsg(rsp.get());
-      auto pp2 = GetProposalFromMsg(req2.get());
 
       pp->pid_ = pp2->pid_ + 1;
     }
@@ -49,17 +56,18 @@ struct DummyLocalConn : public LocalConn {
 
     if (req2->type_ == kMsgType_PREPARE_REQ) {
       promised_ = req2;
+      rspfp->opaque_++;
       rspfp->status_ = kPaxosState_PROMISED;
     } else if (req2->type_ == kMsgType_ACCEPT_REQ) {
       accepted_ = req2;
+      pp2->opaque_++;
+      rspfp->opaque_++;
       rspfp->status_ = kPaxosState_ACCEPTED;
     } else if (req2->type_ == kMsgType_CHOSEN_REQ) {
       chosen_ = true;
-      last_chosen_ = rspfp->pentry_;
+      rspfp->last_chosen_ = rspfp->pentry_;
       rspfp->status_ = kPaxosState_CHOSEN;
     }
-
-    rspfp->last_chosen_ = last_chosen_;
 
     LOG_INFO << "acceptor(" << addr_.id_ << "), local conn returns rsp, type:" << rsp->type_
              << ", reqid:" << rspfp->pid_ << ", pinst:" << rspfp->plid_ << ", entry:" << rspfp->pentry_;
@@ -72,7 +80,6 @@ struct DummyLocalConn : public LocalConn {
   bool rejectPrepare_{false};
   bool rejectAccept_{false};
 
-  uint64_t last_chosen_{~0ull};
   std::shared_ptr<PaxosMsg> accepted_;
   std::shared_ptr<PaxosMsg> promised_;
   std::shared_ptr<PaxosMsg> fake_rsp_;
@@ -105,11 +112,12 @@ struct DummyRemoteConn : public RemoteConn {
     rsp->from_ = addr_.id_;
     rsp->type_ = req->type_ + 1;
 
+    auto reqfp = GetProposalFromMsg(req2.get());
+
     if (req2->type_ == kMsgType_PREPARE_REQ && fake_rsp_) {
       fake_rsp_->from_ = addr_.id_;
       fake_rsp_->reqid_ = req2->reqid_;
       fake_rsp_->type_ = kMsgType_PREPARE_RSP;
-      auto reqfp = GetProposalFromMsg(req2.get());
       auto rspfp = GetProposalFromMsg(fake_rsp_.get());
 
       rspfp->plid_ = reqfp->plid_;
@@ -119,7 +127,7 @@ struct DummyRemoteConn : public RemoteConn {
       rspfp->value_id_ = reqfp->value_id_ + 1;
 
       LOG_INFO << "acceptor(" << addr_.id_
-               << ") returns last vote, req pid:" << reqfp->pid_
+               << ") from remote returns last vote, req pid:" << reqfp->pid_
                << ", rsp pid:" << rspfp->pid_ << ", req vsz:" << reqfp->size_
                << ", rsp vsz:" << rspfp->size_
                << ", req vid:" << reqfp->value_id_
@@ -139,18 +147,20 @@ struct DummyRemoteConn : public RemoteConn {
     }
 
     if (req2->type_ == kMsgType_PREPARE_REQ) {
+      rpp->opaque_++;
       promised_ = req2;
       rpp->status_ = kPaxosState_PROMISED;
     } else if (req2->type_ == kMsgType_ACCEPT_REQ) {
+      rpp->opaque_++;
+      reqfp->opaque_++;
       accepted_ = req2;
       rpp->status_ = kPaxosState_ACCEPTED;
     } else if (req2->type_ == kMsgType_CHOSEN_REQ) {
       chosen_ = true;
-      last_chosen_ = rpp->pentry_;
       rpp->status_ = kPaxosState_CHOSEN;
+      rpp->last_chosen_ = rpp->pentry_;
     }
 
-    rpp->last_chosen_ = last_chosen_;
     std::async(std::launch::async, rsper, std::move(rsp));
     return kErrCode_OK;
   }
@@ -159,7 +169,6 @@ struct DummyRemoteConn : public RemoteConn {
   bool rejectPrepare_{false};
   bool rejectAccept_{false};
 
-  uint64_t last_chosen_{~0ull};
   std::shared_ptr<PaxosMsg> accepted_;
   std::shared_ptr<PaxosMsg> promised_;
   std::shared_ptr<PaxosMsg> fake_rsp_;
@@ -170,7 +179,7 @@ TEST(proposer, doPropose) {
   config->timeout_ = 8;  // 8ms
   config->pid_cookie_ = 8; // prepare id > 8
   config->local_ = {0, ConnType_LOCAL, "xxxx:yyy"};
-  config->plog_inst_num_ = 5;
+  config->plog_inst_num_ = 666;
   config->peer_.push_back({1, ConnType_REMOTE, "aaaa:bb"});
   config->peer_.push_back({2, ConnType_REMOTE, "aaaa2:bb2"});
 
@@ -220,7 +229,7 @@ TEST(proposer, doPropose) {
   ASSERT_EQ(config->local_.id_, p11->proposer_);
   ASSERT_EQ(kPaxosState_ACCEPTED, p11->status_);
   ASSERT_EQ(11, p11->size_);
-  ASSERT_EQ(0xbadf00d, p11->opaque_);
+  ASSERT_EQ(0xbadf00d + 2, p11->opaque_);
   ASSERT_EQ(0, memcmp("dummy value", p11->data_, 11));
   ASSERT_EQ(0, memcmp(p11, p12, ProposalHeaderSz + p11->size_));
   ASSERT_EQ(0, memcmp(p11, p13, ProposalHeaderSz + p11->size_));
@@ -240,7 +249,7 @@ TEST(proposer, doPropose) {
   ASSERT_EQ(config->local_.id_, p21->proposer_);
   ASSERT_EQ(kPaxosState_ACCEPTED, p21->status_);
   ASSERT_EQ(11, p21->size_);
-  ASSERT_EQ(0xbadf00d, p21->opaque_);
+  ASSERT_EQ(0xbadf00d + 1, p21->opaque_);
   ASSERT_EQ(0, memcmp("dummy value", p21->data_, 11));
   ASSERT_EQ(0, memcmp(p21, p22, ProposalHeaderSz + p21->size_));
   ASSERT_EQ(0, memcmp(p21, p23, ProposalHeaderSz + p21->size_));
@@ -258,7 +267,7 @@ TEST(proposer, doPropose) {
 
   LOG_INFO << "#########last vote test##########";
 
-  ASSERT_EQ(kErrCode_PREPARE_PEER_VALUE, pp.Propose(0xbadf00d, "dummy value"));
+  ASSERT_EQ(kErrCode_PREPARE_PEER_VALUE, pp.Propose(0xbadf00d, "dummy value", 11));
 
   ASSERT_EQ(0, dr1->accepted_->from_);
   ASSERT_EQ(0, dr2->accepted_->from_);
@@ -271,7 +280,7 @@ TEST(proposer, doPropose) {
   auto p32 = reinterpret_cast<Proposal*>(dr2->accepted_->data_);
   auto p33 = reinterpret_cast<Proposal*>(dlocal->accepted_->data_);
 
-  ASSERT_EQ(3, p31->pentry_);
+  ASSERT_EQ(1, p31->pentry_);
   ASSERT_EQ(2, p31->proposer_);
   ASSERT_EQ(2, p32->proposer_);
   ASSERT_EQ(2, p33->proposer_);
@@ -281,9 +290,9 @@ TEST(proposer, doPropose) {
   ASSERT_EQ(12, p31->size_);
   ASSERT_EQ(12, p32->size_);
   ASSERT_EQ(12, p33->size_);
-  ASSERT_EQ(0xbadf00d + 23, p31->opaque_);
-  ASSERT_EQ(0xbadf00d + 23, p32->opaque_);
-  ASSERT_EQ(0xbadf00d + 23, p33->opaque_);
+  ASSERT_EQ(0xbadf00d + 23 + 2, p31->opaque_);
+  ASSERT_EQ(0xbadf00d + 23 + 2, p32->opaque_);
+  ASSERT_EQ(0xbadf00d + 23 + 2, p33->opaque_);
   ASSERT_EQ(0, memcmp("miliao dummy", p31->data_, 12));
   ASSERT_EQ(0, memcmp(p31, p32, ProposalHeaderSz + p31->size_));
   ASSERT_EQ(0, memcmp(p31, p33, ProposalHeaderSz + p31->size_));
@@ -306,7 +315,7 @@ TEST(proposer, doPropose) {
 
   LOG_INFO << "@@@@@@test multiple last vote@@@@@";
 
-  ASSERT_EQ(kErrCode_PREPARE_PEER_VALUE, pp.Propose(0xbadf00d, "dummy value"));
+  ASSERT_EQ(kErrCode_PREPARE_PEER_VALUE, pp.Propose(0xbadf00d, "dummy value", 22));
 
   auto p41 = reinterpret_cast<Proposal*>(dr1->accepted_->data_);
   auto p42 = reinterpret_cast<Proposal*>(dr2->accepted_->data_);
@@ -321,9 +330,9 @@ TEST(proposer, doPropose) {
   ASSERT_EQ(12, p41->size_);
   ASSERT_EQ(12, p42->size_);
   ASSERT_EQ(12, p43->size_);
-  ASSERT_EQ(0xbadf00d + 43, p41->opaque_);
-  ASSERT_EQ(0xbadf00d + 43, p42->opaque_);
-  ASSERT_EQ(0xbadf00d + 43, p43->opaque_);
+  ASSERT_EQ(0xbadf00d + 43 + 2, p41->opaque_);
+  ASSERT_EQ(0xbadf00d + 43 + 2, p42->opaque_);
+  ASSERT_EQ(0xbadf00d + 43 + 2, p43->opaque_);
   ASSERT_EQ(0, memcmp("mi1ia0 dummy", p41->data_, 12));
   ASSERT_EQ(0, memcmp(p41, p42, ProposalHeaderSz + p41->size_));
   ASSERT_EQ(0, memcmp(p41, p43, ProposalHeaderSz + p41->size_));
@@ -334,29 +343,29 @@ TEST(proposer, doPropose) {
   dlocal->fake_rsp_.reset();
 
   dr1->rejectPrepare_ = true;
-  ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value"));
+  ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value", 13));
 
   dr1->rejectPrepare_ = true;
   dr2->rejectPrepare_ = true;
-  ASSERT_EQ(kErrCode_PREPARE_NOT_QUORAUM, pp.Propose(0xbadf00d, "dummy value"));
+  ASSERT_EQ(kErrCode_PREPARE_NOT_QUORAUM, pp.Propose(0xbadf00d, "dummy value", 14));
 
   dr1->rejectPrepare_ = false;
   dr2->rejectPrepare_ = false;
-  ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value"));
+  ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value", 15));
 
   dr2->rejectAccept_ = true;
-  ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value"));
+  ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value", 16));
 
   dr1->rejectPrepare_ = true;
   dr2->rejectAccept_ = true;
-  ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value"));
+  ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value", 17));
 
   dr1->rejectPrepare_ = false;
   dr1->rejectAccept_ = false;
 
   dr2->rejectPrepare_ = true;
   dr2->rejectAccept_ = true;
-  ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value"));
+  ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value", 18));
 
   dr1->rejectAccept_ = true;
   dr1->rejectPrepare_ = false;
@@ -364,7 +373,7 @@ TEST(proposer, doPropose) {
   dr2->rejectPrepare_ = false;
 
   LOG_INFO << "test accept reject";
-  ASSERT_EQ(kErrCode_ACCEPT_NOT_QUORAUM, pp.Propose(0xbadf00d, "dummy value"));
+  ASSERT_EQ(kErrCode_ACCEPT_NOT_QUORAUM, pp.Propose(0xbadf00d, "dummy value", 19));
 
   dr1->rejectAccept_ = false;
   dr1->rejectPrepare_ = false;
@@ -394,9 +403,11 @@ TEST(proposer, doPropose) {
   ASSERT_EQ(1, pp12->pid_);
 
   // two phase
-  ASSERT_EQ(kErrCode_OK, pp.Propose(0xbadf00d, "dummy value", 2));
+  LOG_INFO << "test two phase paxos";
+  ASSERT_EQ(kErrCode_OK, pp.Propose(233, "dummy value", 2));
   auto pp13 = reinterpret_cast<Proposal*>(dr1->accepted_->data_);
   ASSERT_EQ(1, pp13->pentry_);
+  ASSERT_EQ(233 + 2, pp13->opaque_);
   ASSERT_EQ(uint16_t(~0u), pp13->last_chosen_from_);
 
   ASSERT_GT(pp13->pid_, 1);

@@ -45,7 +45,7 @@ class Proposer {
     IdGenByDate vig_;  // value id generator
 
     InstanceState(int pid, int proposer_count)
-        : proposer_id_(pid), last_chosen_from_(~0u), last_chosen_entry_(0), ig_(pid, proposer_count), vig_(0xff, 1) {}
+        : proposer_id_(pid), last_chosen_from_(~0u), last_chosen_entry_(0), ig_(pid + 1, proposer_count), vig_(0xff, 1) {}
   };
 
  private:

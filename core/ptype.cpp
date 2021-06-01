@@ -45,4 +45,19 @@ namespace quarrel {
         memcpy(rp.get(), &pm, PaxosMsgHeaderSz + ProposalHeaderSz + value_size);
         return rp;
     }
+
+    int CopyProposalMeta(Proposal& dst, const Proposal& src) {
+      int c = 0;
+      if (src.term_ > dst.term_) {
+        c++;
+        dst.term_ = src.term_;
+      }
+
+      if (src.opaque_ != dst.opaque_) {
+        c++;
+        dst.opaque_ = src.opaque_;
+      }
+
+      return c;
+    }
 }
