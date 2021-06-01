@@ -91,7 +91,7 @@ struct PaxosMsg {
   uint32_t size_;
   uint32_t type_;
   uint32_t version_;
-  uint32_t from_;
+  uint32_t from_;  // svr id
   uint32_t errcode_;
   uint64_t reqid_;   // rpc id
   uint8_t data_[1];  // struct hack

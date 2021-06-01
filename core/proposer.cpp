@@ -60,7 +60,7 @@ std::shared_ptr<PaxosMsg> Proposer::allocPaxosMsg(uint64_t pinst, uint64_t opaqu
   pp->pentry_ = entry;
   pp->opaque_ = opaque;
   pp->status_ = kPaxosState_PREPARED;
-  pp->proposer_ = uint16_t(config_->local_.id_);
+  pp->proposer_ = uint16_t(state.proposer_id_);
 
   pp->value_id_ = state.vig_.GetAndInc();
   pp->last_chosen_ = state.last_chosen_entry_;
@@ -159,7 +159,7 @@ bool Proposer::canSkipPrepare(const Proposal& pp) {
            << ", proposer id:" << state.proposer_id_ << ", pid:" << pp.pid_;
   */
 
-  if (state.last_chosen_entry_ == entry - 1 && state.last_chosen_from_ == uint32_t(config_->local_.id_) && pp.pid_ == state.proposer_id_ + 1) {
+  if (state.last_chosen_entry_ == entry - 1 && state.last_chosen_from_ == state.proposer_id_ && pp.pid_ == state.proposer_id_ + 1) {
     return true;
   }
 
