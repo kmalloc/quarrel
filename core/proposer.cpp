@@ -29,7 +29,7 @@ Proposer::Proposer(std::shared_ptr<Configure> config)
 
   for (auto i = 0ull; i < icount; i++) {
     auto pid = mapper->GetMemberIdBySvrId(i, svrid);  // proposer id
-    states_.emplace_back(pid + 1, pcount);
+    states_.emplace_back(pid, pcount);
   }
 }
 
@@ -48,7 +48,7 @@ std::shared_ptr<PaxosMsg> Proposer::allocPaxosMsg(uint64_t pinst, uint64_t opaqu
     pid = state.ig_.GetAndInc();
   }
 
-  pm->from_ = config_->local_.id_;
+  pm->from_ = config_->local_.id_;  // this is server id not proposer id.
   pm->type_ = kMsgType_PREPARE_REQ;
   pm->version_ = config_->msg_version_;
 
@@ -95,8 +95,12 @@ bool Proposer::UpdateChosenInfo(uint64_t pinst, uint64_t chosen, uint64_t from) 
     return false;
   }
 
-  state.ig_.Reset(state.proposer_id_);
+  /*
+  LOG_ERR << "local chosen entry updated, pinst:" << pinst << ", current chosen:"
+          << state.last_chosen_entry_ << ", new chosen:" << chosen << ", from:" << from;
+  */
 
+  state.ig_.Reset(state.proposer_id_ + 1);
   state.last_chosen_entry_ = chosen;
   state.last_chosen_from_ = uint32_t(from);
 
@@ -106,7 +110,7 @@ bool Proposer::UpdateChosenInfo(uint64_t pinst, uint64_t chosen, uint64_t from) 
 int Proposer::onChosenNotify(std::shared_ptr<PaxosMsg> msg) {
   auto pp = GetProposalFromMsg(msg.get());
 
-  auto pinst = pp->plid_;
+  auto pinst = pp->plid_ % locks_.size();
   std::lock_guard<std::mutex> l(locks_[pinst]);
 
   // external chosen notify is only allowed for master.
@@ -149,7 +153,13 @@ bool Proposer::canSkipPrepare(const Proposal& pp) {
   // currently all last_chosen_from_ is initialized to 0 at startup, which means both master and slave will do 2-phase proposing for the first proposal after recovering.
   // in the case of master startup, there is room for optimization, just make sure above rule is followed.
 
-  if (state.last_chosen_entry_ == entry - 1 && state.last_chosen_from_ == state.proposer_id_ && pp.pid_ == state.proposer_id_ + 1) {
+  /*
+  LOG_INFO << "check skip prepare, last chosen:" << state.last_chosen_entry_
+           << ", last from:" << state.last_chosen_from_ << ", inst:" << pinst << ", entry:" << entry
+           << ", proposer id:" << state.proposer_id_ << ", pid:" << pp.pid_;
+  */
+
+  if (state.last_chosen_entry_ == entry - 1 && state.last_chosen_from_ == uint32_t(config_->local_.id_) && pp.pid_ == state.proposer_id_ + 1) {
     return true;
   }
 
@@ -295,9 +305,7 @@ int Proposer::doPrepare(std::shared_ptr<PaxosMsg>& pm) {
       continue;
     }
 
-    if (rsp_proposal->last_chosen_ > 0) {
-      UpdateChosenInfo(rsp_proposal->plid_, rsp_proposal->last_chosen_, rsp_proposal->last_chosen_from_);
-    }
+    CopyProposalMeta(*origin_proposal, *rsp_proposal);
 
     if (rsp_proposal->pid_ > origin_proposal->pid_) {
       // rejected
@@ -305,8 +313,7 @@ int Proposer::doPrepare(std::shared_ptr<PaxosMsg>& pm) {
       continue;
     }
 
-    if (rsp_proposal->value_id_ != origin_proposal->value_id_ ||
-        rsp_proposal->opaque_ != origin_proposal->opaque_) {
+    if (rsp_proposal->value_id_ != origin_proposal->value_id_) {
       // peer responses with last vote
 
       LOG_INFO << "peer return last vote, from:" << m->from_
@@ -362,10 +369,6 @@ int Proposer::doAccept(std::shared_ptr<PaxosMsg>& pm) {
       continue;
     }
 
-    if (rsp_proposal->last_chosen_ > 0) {
-      UpdateChosenInfo(rsp_proposal->plid_, rsp_proposal->last_chosen_, rsp_proposal->last_chosen_from_);
-    }
-
     if (rsp_proposal->status_ != kPaxosState_ACCEPTED) {
       UpdatePrepareId(origin_proposal->plid_, rsp_proposal->pid_);
       LOG_ERR << "peer failed to accept, status:" << rsp_proposal->status_
@@ -374,14 +377,15 @@ int Proposer::doAccept(std::shared_ptr<PaxosMsg>& pm) {
       continue;
     }
 
+    CopyProposalMeta(*origin_proposal, *rsp_proposal);
+
     if (rsp_proposal->pid_ > origin_proposal->pid_) {
       // rejected
       UpdatePrepareId(origin_proposal->plid_, rsp_proposal->pid_);
       continue;
     }
 
-    if (rsp_proposal->value_id_ != origin_proposal->value_id_ ||
-        rsp_proposal->opaque_ != origin_proposal->opaque_) {
+    if (rsp_proposal->value_id_ != origin_proposal->value_id_) {
       // not possible without fast-accept enabled.
       LOG_ERR << "invalid doAccept rsp from peer(" << pm->from_
               << "), value id is changed, rsp:(" << rsp_proposal->value_id_
