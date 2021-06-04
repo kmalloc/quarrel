@@ -107,7 +107,7 @@ bool Proposer::UpdateChosenInfo(uint64_t pinst, uint64_t chosen, uint64_t from) 
   return true;
 }
 
-int Proposer::HandleChosenNotify(std::shared_ptr<PaxosMsg> msg, bool from_plog) {
+int Proposer::OnEntryChosen(std::shared_ptr<PaxosMsg> msg, bool from_plog) {
   auto pp = GetProposalFromMsg(msg.get());
 
   auto pinst = pp->plid_ % locks_.size();

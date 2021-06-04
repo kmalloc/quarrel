@@ -32,7 +32,7 @@ class Proposer {
   // update paxos instance states for chosen entry:
   // 1. chosen entry recovered from plog, just for the last chosen entry.
   // 2. entry written by remote peers, this is used to optimize first-write from slave.
-  int HandleChosenNotify(std::shared_ptr<PaxosMsg> msg, bool from_plog = false);
+  int OnEntryChosen(std::shared_ptr<PaxosMsg> msg, bool from_plog = false);
 
  private:
   // in-memory state of each paxos instance.
