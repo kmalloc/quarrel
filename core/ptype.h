@@ -64,6 +64,7 @@ enum PaxosErrCode {
   kErrCode_NEED_CATCHUP = -30016,
   kErrCode_ENTRY_NOT_EXIST = -30017,
   kErrCode_ENTRY_NOT_FOUND = -30018,
+  kErrCode_ACCEPTOR_QUEUE_FULL = -30019,
 };
 
 constexpr int MAX_ACCEPTOR_NUM = 32;

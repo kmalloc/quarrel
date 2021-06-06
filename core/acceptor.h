@@ -78,6 +78,7 @@ class Acceptor {
   std::shared_ptr<PlogMng> pmn_;
   std::shared_ptr<Configure> config_;
   std::vector<WorkerData> workers_;
+  std::vector<ChosenNotifyFunc> notification_;
 };
 
 }  // namespace quarrel

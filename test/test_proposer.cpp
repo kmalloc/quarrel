@@ -483,8 +483,8 @@ TEST(proposer, doPropose) {
   dr1->rejectReadProbe_ = false;
   dr2->rejectReadProbe_ = false;
 
-  auto chosen_notify1 = [&](std::shared_ptr<PaxosMsg> m) { if (m->from_ != config->local_.id_) pp.HandleChosenNotify(std::move(m));return 0; };
-  auto chosen_notify2 = [&](std::shared_ptr<PaxosMsg> m) { if (m->from_ != config2->local_.id_) pps.HandleChosenNotify(std::move(m));return 0; };
+  auto chosen_notify1 = [&](std::shared_ptr<PaxosMsg> m) { if (m->from_ != config->local_.id_) pp.OnEntryChosen(std::move(m));return 0; };
+  auto chosen_notify2 = [&](std::shared_ptr<PaxosMsg> m) { if (m->from_ != config2->local_.id_) pps.OnEntryChosen(std::move(m));return 0; };
 
   dr1->chosen_notify_ = chosen_notify1;
   dr2->chosen_notify_ = chosen_notify2;
