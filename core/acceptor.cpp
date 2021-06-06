@@ -53,7 +53,11 @@ int Acceptor::AddMsg(std::shared_ptr<PaxosMsg> msg, ResponseCallback cb) {
   req.cb_ = std::move(cb);
   req.msg_ = std::move(msg);
 
-  workers_[idx].mq_.Enqueue(std::move(req), false);
+  auto ret = workers_[idx].mq_.Enqueue(std::move(req), false);
+  if (ret) {
+    return kErrCode_ACCEPTOR_QUEUE_FULL;
+  }
+
   if (workers_[idx].pending_.fetch_add(1) == 0) {
     workers_[idx].wg_.Notify();
   }
