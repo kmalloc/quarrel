@@ -10,7 +10,7 @@ class DummyEntryMngForLoad : public EntryMng {
 
  public:
   DummyEntryMngForLoad(std::shared_ptr<Configure> conf, uint64_t pinst)
-      : EntryMng(std::move(conf), pinst, 0) {
+      : EntryMng(std::move(conf), pinst) {
     meta_.last_committed_ = 300;
   }
 

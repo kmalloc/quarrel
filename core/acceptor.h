@@ -16,20 +16,6 @@
 
 namespace quarrel {
 
-struct PaxosRequest {
-  ResponseCallback cb_;
-  std::shared_ptr<PaxosMsg> msg_;
-};
-
-// will be indexed by thread num, make sure it is 64 byte aligned, so that no
-// false sharing will occur.
-struct WorkerData {
-  WaitGroup wg_;
-  std::thread th_;
-  std::atomic<uint64_t> pending_;
-  LockFreeQueue<PaxosRequest> mq_;
-};
-
 class Acceptor {
  public:
   explicit Acceptor(std::shared_ptr<Configure> config);
@@ -58,6 +44,20 @@ class Acceptor {
   }
 
  private:
+  struct PaxosRequest {
+    ResponseCallback cb_;
+    std::shared_ptr<PaxosMsg> msg_;
+  };
+
+  // will be indexed by thread num, make sure it is 64 byte aligned, so that no
+  // false sharing will occur.
+  struct WorkerData {
+    WaitGroup wg_;
+    std::thread th_;
+    std::atomic<uint64_t> pending_;
+    LockFreeQueue<PaxosRequest> mq_;
+  };
+
   Acceptor(const Acceptor&) = delete;
   Acceptor& operator=(const Acceptor&) = delete;
 

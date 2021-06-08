@@ -12,8 +12,8 @@
 using namespace quarrel;
 
 struct DummyEntryMng : public EntryMng {
-  DummyEntryMng(std::shared_ptr<Configure> config, uint64_t pinst, int local_acceptor)
-      : EntryMng(std::move(config), pinst, local_acceptor) {}
+  DummyEntryMng(std::shared_ptr<Configure> config, uint64_t pinst)
+      : EntryMng(std::move(config), pinst) {}
 
   virtual int SaveEntry(uint64_t pinst, uint64_t entry, const Entry& ent) {
     (void)pinst;
@@ -87,8 +87,8 @@ TEST(acceptor_test, test_acceptor_api) {
   std::shared_ptr<PlogMng> pmn = std::make_shared<PlogMng>(config, mapper);
 
   auto entry_mng_creator =
-      [](std::shared_ptr<Configure> conf, uint64_t pinst, int local_acceptor) -> std::unique_ptr<EntryMng> {
-    return make_unique<DummyEntryMng>(std::move(conf), pinst, local_acceptor);
+      [](std::shared_ptr<Configure> conf, uint64_t pinst) -> std::unique_ptr<EntryMng> {
+    return make_unique<DummyEntryMng>(std::move(conf), pinst);
   };
 
   pmn->SetEntryMngCreator(entry_mng_creator);

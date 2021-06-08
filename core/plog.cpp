@@ -281,8 +281,7 @@ int PlogMng::InitPlog() {
   mngs_.reserve(config_->plog_inst_num_);
 
   for (auto i = 0u; i < config_->plog_inst_num_; ++i) {
-    auto local_acceptor = pg_mapper_->GetMemberIdBySvrId(i, config_->local_.id_);
-    mngs_.push_back(creator_(config_, i, local_acceptor));
+    mngs_.push_back(creator_(config_, i));
   }
 
   return 0;
@@ -293,8 +292,7 @@ EntryMng* PlogMng::GetEntryMngAndCreateIfNotExist(uint64_t pinst) {
 
   auto& mng = mngs_[pinst];
   if (!mng) {
-    auto local_acceptor = pg_mapper_->GetMemberIdBySvrId(pinst, config_->local_.id_);
-    mng = creator_(config_, pinst, local_acceptor);
+    mng = creator_(config_, pinst);
   }
   return mng.get();
 }

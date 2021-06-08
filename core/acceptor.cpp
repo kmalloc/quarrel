@@ -261,7 +261,7 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
                   << ", entry:" << entry << ", pid:" << pp.pid_;
         }
       } else {
-        // try to update chosen value, reject it.
+        // attempt to update chosen value, reject it.
         accepted = false;
         accepted_pp = existed_pp.get();
         errcode = kErrCode_INVALID_PROPOSAL_REQ;

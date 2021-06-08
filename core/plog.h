@@ -73,13 +73,10 @@ class EntryMng {
   // TODO entry recycle
 
  public:
-  EntryMng(std::shared_ptr<Configure> config,
-           uint64_t pinst,
-           int local_acceptor)
+  EntryMng(std::shared_ptr<Configure> config, uint64_t pinst)
       : db_(config->local_storage_path_),
         config_(std::move(config)),
         pinst_(pinst),
-        local_acceptor_id_(local_acceptor),
         entries_(config_->entry_cache_num_) {}
 
   virtual ~EntryMng() {}
@@ -87,7 +84,6 @@ class EntryMng {
   int SetChosen(uint64_t entry);
   bool LoadAllFromDisk();
   bool RecoverRange(uint64_t start_entry, uint64_t end_entry);
-  void SetLocalAcceptor(int id) { local_acceptor_id_ = id; }
 
   void Reset();
   uint64_t GetNextEntry(bool create);
@@ -138,7 +134,6 @@ class EntryMng {
   std::shared_ptr<Configure> config_;
 
   uint64_t pinst_;
-  int local_acceptor_id_{0};
   uint64_t last_access_time_{0};
   uint64_t max_committed_entry_{0};
   uint64_t max_continue_chosen_entry_{0};
@@ -151,8 +146,7 @@ class EntryMng {
   LruMap<uint64_t, std::unique_ptr<Entry>> entries_;
 };
 
-using EntryMngCreator = std::function<std::unique_ptr<EntryMng>(
-    std::shared_ptr<Configure> config, uint64_t pinst, int local_acceptor)>;
+using EntryMngCreator = std::function<std::unique_ptr<EntryMng>(std::shared_ptr<Configure> config, uint64_t pinst)>;
 
 class PlogMng {
  public:
