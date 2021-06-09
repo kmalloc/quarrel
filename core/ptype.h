@@ -29,6 +29,7 @@ enum PaxosState {
   kPaxosState_COMMIT_FAILED = 8,
   kPaxosState_INVALID_PROPOSAL = 9,
   kPaxosState_LOCAL_LAG_BEHIND = 10,
+  kPaxosState_FAST_ACCEPT_FAILED = 11,
 };
 
 enum PaxosMsgType {

@@ -72,7 +72,7 @@ int Acceptor::workerProc(int workerid) {
   while (run_ > 0) {
     PaxosRequest req;
     if (queue->mq_.Dequeue(req, false) == QueueType::RT_EMPTY) {
-      queue->wg_.Wait(100);
+      queue->wg_.Wait(1);
       continue;
     }
 
@@ -296,7 +296,14 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
       }
     }
   } else {
-    // FIXME: #0 proposal optimization.
+    // #0 proposal optimization.
+    pp.status_ = kPaxosState_ACCEPTED;
+    if (pmn_->SetAccepted(pp) == kErrCode_OK) {
+      accepted = true;
+    } else {
+      errcode = kErrCode_WRITE_PLOG_FAIL;
+      pp.status_ = kPaxosState_FAST_ACCEPT_FAILED;
+    }
   }
 
   memcpy(rpp, accepted_pp, ProposalHeaderSz);
