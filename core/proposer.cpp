@@ -132,7 +132,7 @@ bool Proposer::canSkipPrepare(const Proposal& pp) {
   auto entry = pp.pentry_;
   const auto& state = states_[pinst % states_.size()];
 
-  // acceptor id of master must be the smallest of the quorum.
+  // acceptor id of master must be the smallest of the synod(set of acceptors).
   // this ensure one-phase paxos will not succeed in the case of lagged-behind master try to propose to an entry which already has accepted value in remote peers.
   // consider following case
   // master: |v1|v2|| slave1: |v1|v2|v3| slave2: |v1|v2|v3|
@@ -166,11 +166,9 @@ bool Proposer::canSkipPrepare(const Proposal& pp) {
   return false;
 }
 
-std::shared_ptr<BatchRpcContext> Proposer::doBatchRpcRequest(
-    int majority, std::shared_ptr<PaxosMsg>& pm) {
+std::shared_ptr<BatchRpcContext> Proposer::doBatchRpcRequest(int majority, std::shared_ptr<PaxosMsg>& pm) {
   // shared objects must be put on heap.
-  // so that when a delayed msg arrives, there won't be any memory access
-  // violation
+  // so that when a delayed msg arrives, there won't be any memory access violation.
   auto ctx = std::make_shared<BatchRpcContext>(majority);
 
   auto cb = [ctx](std::shared_ptr<PaxosMsg> msg) -> int {
@@ -277,15 +275,12 @@ int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
 }
 
 int Proposer::doPrepare(std::shared_ptr<PaxosMsg>& pm) {
-  // send to local conn
-  // then to remote
-
   uint32_t valid_rsp = 0;
   std::shared_ptr<PaxosMsg> last_voted;
   auto majority = config_->total_acceptor_ / 2 + 1;
   auto origin_proposal = reinterpret_cast<Proposal*>(pm->data_);
 
-  auto ctx = doBatchRpcRequest(majority, pm);
+  auto ctx = doBatchRpcRequest(config_->total_acceptor_ - 1, pm);
   if (ctx->ret_ != kErrCode_OK) return ctx->ret_;
 
   for (auto idx = 0; idx < ctx->rsp_count_; ++idx) {
@@ -344,6 +339,12 @@ int Proposer::doPrepare(std::shared_ptr<PaxosMsg>& pm) {
       return kErrCode_PREPARE_PEER_VALUE;
     }
     return kErrCode_OK;
+  } else {
+    // TODO: maybe notify lag-behind acceptor to do catchup here asynchronously.
+    // in case of local acceptor lag behind, first write attempt will fail.
+    // then local states last_chosen_ will be updated to globally max chosen(information gathered from other acceptors)
+    // a second attempt to write to local acceptor will trigger that acceptor to do catchup.
+    // so explicit catchup notification from proposer is not necessary but no harm.
   }
 
   return kErrCode_PREPARE_NOT_QUORAUM;
@@ -355,7 +356,7 @@ int Proposer::doAccept(std::shared_ptr<PaxosMsg>& pm) {
   auto majority = config_->total_acceptor_ / 2 + 1;
   auto origin_proposal = reinterpret_cast<Proposal*>(pm->data_);
 
-  auto ctx = doBatchRpcRequest(majority, pm);
+  auto ctx = doBatchRpcRequest(config_->total_acceptor_ - 1, pm);
   if (ctx->ret_ != kErrCode_OK) return ctx->ret_;
 
   uint32_t valid_rsp = 0;

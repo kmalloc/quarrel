@@ -16,7 +16,7 @@ class PaxosGroupBase {
   virtual int GetPaxosGroupMember(uint64_t pinst, int* out, int sz) = 0;
 };
 
-// 3-members quorum
+// 3-members synod
 class PaxosGroup3 : public PaxosGroupBase {
  public:
   PaxosGroup3();
@@ -30,7 +30,7 @@ class PaxosGroup3 : public PaxosGroupBase {
   int mapping_reverse_[6][3];  // server id to member id mapping.
 };
 
-// 5-members quorum
+// 5-members synod
 class PaxosGroup5 : public PaxosGroupBase {
  public:
   PaxosGroup5();
@@ -44,7 +44,7 @@ class PaxosGroup5 : public PaxosGroupBase {
   int mapping_reverse_[120][5];
 };
 
-// 3-members quorum: kv64 routing used by wechat
+// 3-members synod: kv64 routing used by wechat
 class PaxosGroup64 : public PaxosGroupBase {
 };
 

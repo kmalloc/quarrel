@@ -7,6 +7,7 @@
 
 #include "idgen.hpp"
 #include "waitgroup.hpp"
+#include "timing_wheel.hpp"
 
 #include <mutex>
 #include <vector>
@@ -35,12 +36,12 @@ class Proposer {
   int OnEntryChosen(std::shared_ptr<PaxosMsg> msg, bool from_plog = false);
 
  private:
-  // in-memory state of each paxos instance.
-  // the very first proposal for each instance at startup requires a second try.
-  // since the first try will always fail.
-  // same logic applys for proposing from slave for the moment
-  // a potential optimization for this particular case(write from slave) can be achieved by receiving chosen msg from acceptor.
   struct InstanceState {
+    // in-memory state of each paxos instance.
+    // the very first proposal for each instance at startup requires a second try.
+    // since the first try will always fail.
+    // same logic applys for proposing from slave for the moment
+    // a potential optimization for this particular case(write from slave) can be achieved by receiving chosen msg from acceptor.
     uint32_t proposer_id_;  // proposer id for current proposer, this is varied for each instance.
     uint32_t last_chosen_from_;
     uint64_t last_chosen_entry_;
@@ -48,6 +49,21 @@ class Proposer {
     // idgen will be reset when the latest entry is chosen
     IdGen ig_;         // proposal id generator
     IdGenByDate vig_;  // value id generator
+
+    /*
+    // following used for concurrent control on the same instance.
+
+    // instance state: 0 not used 1 waiting for timeout, 2 timeouted 3 canceled
+    std::atomic<uint32_t> state_;
+
+    // ongoing req for acceptors
+    std::shared_ptr<PaxosMsg> req_;
+
+    // rsp from acceptors for ongoing ballot
+    std::vector<std::shared_ptr<PaxosMsg>> rsp_;
+
+    using RpcRspHandler = std::function<int(std::shared_ptr<PaxosMsg>&)>;
+    */
 
     InstanceState(int pid, int proposer_count)
         : proposer_id_(pid), last_chosen_from_(~0u), last_chosen_entry_(0), ig_(pid + 1, proposer_count), vig_(0xff, 1) {}
@@ -59,15 +75,13 @@ class Proposer {
   int doChosen(std::shared_ptr<PaxosMsg>& p);
 
   bool canSkipPrepare(const Proposal&);
-  std::shared_ptr<PaxosMsg> allocPaxosMsg(uint64_t pinst, uint64_t opaque,
-                                          uint32_t value_size);
-  std::shared_ptr<BatchRpcContext> doBatchRpcRequest(
-      int majority, std::shared_ptr<PaxosMsg>& pm);
+  std::shared_ptr<PaxosMsg> allocPaxosMsg(uint64_t pinst, uint64_t opaque, uint32_t value_size);
 
   bool UpdatePrepareId(uint64_t pinst, uint64_t pid);
   bool UpdateChosenInfo(uint64_t pinst, uint64_t chosen, uint64_t from);
-
   bool UpdateLocalStateFromRemoteMsg(std::shared_ptr<PaxosMsg>&);
+
+  std::shared_ptr<BatchRpcContext> doBatchRpcRequest(int majority, std::shared_ptr<PaxosMsg>& pm);
 
  private:
   std::shared_ptr<ConnMng> conn_;
@@ -75,6 +89,8 @@ class Proposer {
 
   std::vector<std::mutex> locks_;
   std::vector<InstanceState> states_;
+
+  // TimingWheel timeout_;
 };
 
 }  // namespace quarrel

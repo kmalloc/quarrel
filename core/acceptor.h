@@ -65,6 +65,7 @@ class Acceptor {
   std::shared_ptr<PaxosMsg> handlePrepareReq(Proposal& proposal);
   std::shared_ptr<PaxosMsg> handleChosenReq(Proposal& proposal);
 
+  void TriggerLocalCatchup();
   int workerProc(int workerid);
   int doHandleMsg(PaxosRequest req);
   void doCatchupFromPeer(Proposal& pp);

@@ -12,9 +12,9 @@
 namespace quarrel {
 
 enum PaxosGroupType {
-  PGT_Quorum3 = 3,
-  PGT_Quorum5 = 5,
-  PGT_Quorum64 = 64,
+  PGT_Synod3 = 3,
+  PGT_Synod5 = 5,
+  PGT_Synod64 = 64,
 };
 
 enum PaxosState {
@@ -29,7 +29,8 @@ enum PaxosState {
   kPaxosState_COMMIT_FAILED = 8,
   kPaxosState_INVALID_PROPOSAL = 9,
   kPaxosState_LOCAL_LAG_BEHIND = 10,
-  kPaxosState_FAST_ACCEPT_FAILED = 11,
+  kPaxosState_REMOTE_LAG_BEHIND = 11,
+  kPaxosState_FAST_ACCEPT_FAILED = 12,
 };
 
 enum PaxosMsgType {
@@ -66,6 +67,7 @@ enum PaxosErrCode {
   kErrCode_ENTRY_NOT_EXIST = -30017,
   kErrCode_ENTRY_NOT_FOUND = -30018,
   kErrCode_ACCEPTOR_QUEUE_FULL = -30019,
+  kErrCode_REMOTE_NEED_CATCHUP = -30020,
 };
 
 constexpr int MAX_ACCEPTOR_NUM = 32;

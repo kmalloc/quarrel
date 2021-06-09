@@ -126,10 +126,27 @@ void Acceptor::doCatchupFromPeer(Proposal& pp) {
   (void)pp;
 }
 
-int Acceptor::CheckLocalAndMayTriggerCatchup(const Proposal& pp) {
+void Acceptor::TriggerLocalCatchup() {
   // FIXME
-  (void)pp;
-  return 0;
+}
+
+int Acceptor::CheckLocalAndMayTriggerCatchup(const Proposal& pp) {
+  auto pinst = pp.plid_;
+  auto entry = pp.pentry_;
+  auto remote_last_chosen = pp.last_chosen_;
+
+  auto local_last_chosen = pmn_->GetMaxChosenEntry(pinst);
+  if (local_last_chosen >= entry) {
+    return kErrCode_REMOTE_NEED_CATCHUP;
+  }
+
+  if (remote_last_chosen > local_last_chosen) {
+    TriggerLocalCatchup();
+    pmn_->SetGlobalMaxChosenEntry(pinst, remote_last_chosen);
+    return kErrCode_NEED_CATCHUP;
+  }
+
+  return kErrCode_OK;
 }
 
 std::shared_ptr<PaxosMsg> Acceptor::handlePrepareReq(Proposal& pp) {
@@ -146,7 +163,13 @@ std::shared_ptr<PaxosMsg> Acceptor::handlePrepareReq(Proposal& pp) {
   auto ret = CheckLocalAndMayTriggerCatchup(pp);
   if (ret) {
     errcode = ret;
-    status = kPaxosState_LOCAL_LAG_BEHIND;
+    if (ret == kErrCode_NEED_CATCHUP) {
+      status = kPaxosState_LOCAL_LAG_BEHIND;
+    } else if (ret == kErrCode_REMOTE_NEED_CATCHUP) {
+      status = kPaxosState_REMOTE_LAG_BEHIND;
+    } else {
+      assert(0);
+    }
   } else {
     auto& ent = pmn_->GetEntryAndCreateIfNotExist(pinst, entry);
     const auto& existed_pp = ent.GetProposal();

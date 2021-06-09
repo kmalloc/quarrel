@@ -30,11 +30,11 @@ class Paxos {
   // Propose() try to propose a new value.
   // empty value indicates a read probe, testing whether local is up to date.
   // paxos_inst: the paxos instance to write to, default is 0 for single instance paxos.
-  // total number of instances for a quorum is expected to be relativelly small(maybe < 1000).
+  // total number of instances is expected to be relativelly small(maybe < 1000).
   // for a cluster of servers, however, instance count could be really large.
   // users need to handle these instances mapping from global to local.
-  // from a quorum's point of view, it processes only a small consecutive array of instances.
-  // but globally, every quorum handles unique set of consecutive paxos instances.
+  // from a synod's point of view, it processes only a small consecutive array of instances.
+  // but globally, every synod handles unique set of consecutive paxos instances.
   int Propose(uint64_t opaque, const std::string& value,
               uint64_t paxos_inst = 0);
 
