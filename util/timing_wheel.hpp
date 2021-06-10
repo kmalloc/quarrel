@@ -20,6 +20,7 @@ class TimingWheel {
   void Stop() {
     std::lock_guard<std::mutex> l(lock_);
     state_ = 2;
+    worker_.join();
   }
 
   void Start() {

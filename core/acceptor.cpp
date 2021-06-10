@@ -136,7 +136,7 @@ int Acceptor::CheckLocalAndMayTriggerCatchup(const Proposal& pp) {
   auto remote_last_chosen = pp.last_chosen_;
 
   auto local_last_chosen = pmn_->GetMaxChosenEntry(pinst);
-  if (local_last_chosen >= entry) {
+  if (local_last_chosen != ~0ull && local_last_chosen >= entry) {
     return kErrCode_REMOTE_NEED_CATCHUP;
   }
 
