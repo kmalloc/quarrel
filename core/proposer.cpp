@@ -280,6 +280,7 @@ int Proposer::doPrepare(std::shared_ptr<PaxosMsg>& pm) {
   auto majority = config_->total_acceptor_ / 2 + 1;
   auto origin_proposal = reinterpret_cast<Proposal*>(pm->data_);
 
+  // TODO: following is blocking operation, make it async or at leaste just wait for majority rsp if possible(no error occurs)
   auto ctx = doBatchRpcRequest(config_->total_acceptor_ - 1, pm);
   if (ctx->ret_ != kErrCode_OK) return ctx->ret_;
 
