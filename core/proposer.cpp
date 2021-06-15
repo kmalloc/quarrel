@@ -32,9 +32,10 @@ struct InstanceState {
 
   // instance state: 0 not used 1 waiting for timeout, 2 timeouted 3 canceled
   uint32_t state_;
+  std::promise<int> ret_;  // return code to caller
 
   // ongoing req for acceptors
-  // std::shared_ptr<PaxosMsg> req_;
+  std::shared_ptr<PaxosMsg> req_;
 
   // rsp from acceptors for ongoing ballot
   std::shared_ptr<PaxosMsg> rsp_;
@@ -235,13 +236,24 @@ std::shared_ptr<BatchRpcContext> Proposer::doBatchRpcRequest(int majority, std::
 }
 
 int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
+  auto ft = ProposeAsync(opaque, val, pinst);
+  ft.wait();
+  return ft.get();
+}
+
+std::future<int> Proposer::ProposeAsync(uint64_t opaque, const std::string& val, uint64_t pinst) {
   assert(conn_);
 
   pinst = pinst % locks_.size();
   std::lock_guard<std::mutex> l(locks_[pinst]);
 
+  std::promise<int> frt;
   auto pm = allocPaxosMsg(pinst, opaque, uint32_t(val.size()));
-  if (!pm) return kErrCode_OOM;
+
+  if (!pm) {
+    frt.set_value(kErrCode_OOM);
+    return frt.get_future();
+  }
 
   int ret = kErrCode_OK;
   auto pp = reinterpret_cast<Proposal*>(pm->data_);
@@ -256,14 +268,18 @@ int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
   if (val.empty() || !canSkipPrepare(*pp)) {
     // empty val indicates a read probe which must always perform prepare()
     ret = doPrepare(pm);
-  } else {
-    // TODO
+  }
+
+  if (ret == kErrCode_WORKING_IN_PROPGRESS) {
+    states_[pinst].ret_ = std::move(frt);
+    return frt.get_future();
   }
 
   if (ret != kErrCode_OK && ret != kErrCode_PREPARE_PEER_VALUE) {
+    frt.set_value(ret);
     LOG_ERR << "do prepare failed(" << ret << "), pinst:" << pinst
             << ", entry:" << pp->pentry_ << ", vsz:" << val.size() << ", opaque:" << opaque;
-    return ret;
+    return frt.get_future();
   }
 
   pp = reinterpret_cast<Proposal*>(pm->data_);
@@ -279,7 +295,8 @@ int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
 
   if (pp->size_ == 0) {
     // read probe
-    return ret;
+    frt.set_value(kErrCode_OK);
+    return frt.get_future();
   }
 
   pm->from_ = config_->local_.id_;
@@ -304,7 +321,8 @@ int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
     ret = ret2;
   }
 
-  return ret;
+  frt.set_value(ret);
+  return frt.get_future();
 }
 
 int Proposer::doPrepare(std::shared_ptr<PaxosMsg>& pm) {

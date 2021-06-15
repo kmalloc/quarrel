@@ -30,6 +30,8 @@ class Proposer {
   // propose a value
   int Propose(uint64_t opaque, const std::string& val, uint64_t paxos_inst = 0);
 
+  std::future<int> ProposeAsync(uint64_t opaque, const std::string& val, uint64_t paxos_inst = 0);
+
   // TODO, one prepare for mulitple consecutive entry slots
   int ProposeBatch(uint64_t opaque, const std::vector<std::string>& vals, uint64_t pinst);
 
