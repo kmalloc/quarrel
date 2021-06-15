@@ -20,8 +20,8 @@ class WaitGroup {
     }
   }
 
-  bool Wait(uint32_t timeout_ms) {
-    auto timeout = std::chrono::milliseconds(timeout_ms);
+  template <typename Rep, typename Period>
+  bool WaitExt(std::chrono::duration<Rep, Period> timeout) {
     std::unique_lock<decltype(mutex_)> lock(mutex_);
 
     while (count_ > curr_) {
@@ -34,6 +34,16 @@ class WaitGroup {
 
     curr_ = 0;
     return true;
+  }
+
+  bool WaitUs(uint64_t us) {
+    auto timeout = std::chrono::microseconds(us);
+    return WaitExt(timeout);
+  }
+
+  bool Wait(uint64_t timeout_ms) {
+    auto timeout = std::chrono::milliseconds(timeout_ms);
+    return WaitExt(timeout);
   }
 
   bool TryWait() {

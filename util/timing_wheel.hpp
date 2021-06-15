@@ -6,6 +6,8 @@
 #include <vector>
 #include <functional>
 
+#include <sys/prctl.h>
+
 namespace quarrel {
 
 using TimingWheelNotifier = std::function<void(uint64_t)>;
@@ -18,6 +20,10 @@ class TimingWheel {
   ~TimingWheel() { Stop(); }
 
   void Stop() {
+    if (state_ == 2) {
+      return;
+    }
+
     std::lock_guard<std::mutex> l(lock_);
     state_ = 2;
     worker_.join();
@@ -55,6 +61,7 @@ class TimingWheel {
   TimingWheel& operator=(const TimingWheel&) = delete;
 
   void worker() {
+    prctl(PR_SET_NAME, "timingwheel", 0, 0, 0);
     while (state_ != 2) {
       {
         std::lock_guard<std::mutex> l(lock_);

@@ -2,15 +2,13 @@
 #define __QUARREL_ACCEPTOR_H_
 
 #include "ptype.h"
-#include "queue.h"
 #include "plog.h"
 #include "conn.h"
 #include "config.h"
-#include "waitgroup.hpp"
+#include "worker_pool.hpp"
 
-#include <atomic>
-#include <thread>
 #include <memory>
+#include <future>
 #include <vector>
 #include <functional>
 
@@ -27,6 +25,8 @@ class Acceptor {
   // ensuring that each plog instance is mutated from one thread only.
   int StartWorker();
   int StopWorker();
+
+  std::future<int> AddMsgAsync(std::shared_ptr<PaxosMsg> m);
 
   // note: every request required a response.
   int AddMsg(std::shared_ptr<PaxosMsg> m, ResponseCallback cb);
@@ -49,15 +49,6 @@ class Acceptor {
     std::shared_ptr<PaxosMsg> msg_;
   };
 
-  // will be indexed by thread num, make sure it is 64 byte aligned, so that no
-  // false sharing will occur.
-  struct WorkerData {
-    WaitGroup wg_;
-    std::thread th_;
-    std::atomic<uint64_t> pending_;
-    LockFreeQueue<PaxosRequest> mq_;
-  };
-
   Acceptor(const Acceptor&) = delete;
   Acceptor& operator=(const Acceptor&) = delete;
 
@@ -66,19 +57,16 @@ class Acceptor {
   std::shared_ptr<PaxosMsg> handleChosenReq(Proposal& proposal);
 
   void TriggerLocalCatchup();
-  int workerProc(int workerid);
   int doHandleMsg(PaxosRequest req);
   void doCatchupFromPeer(Proposal& pp);
   int CheckLocalAndMayTriggerCatchup(const Proposal& pp);
 
  private:
   uint64_t term_;  // logical time
-  bool started_{false};
-  std::atomic<uint8_t> run_{0};
+  WorkerPool<PaxosRequest> wpool_;
 
   std::shared_ptr<PlogMng> pmn_;
   std::shared_ptr<Configure> config_;
-  std::vector<WorkerData> workers_;
   std::vector<ChosenNotifyFunc> notification_;
 };
 
