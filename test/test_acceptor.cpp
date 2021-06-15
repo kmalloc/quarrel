@@ -152,6 +152,7 @@ TEST(acceptor_test, test_acceptor_api) {
   };
 
   p1->pid_ = 23;
+  p1->pentry_ = 5;
   acceptor.AddMsg(m1, verify);
   ASSERT_TRUE(wg1.Wait(30));
 

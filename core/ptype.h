@@ -12,9 +12,9 @@
 namespace quarrel {
 
 enum PaxosGroupType {
-  PGT_Quorum3 = 3,
-  PGT_Quorum5 = 5,
-  PGT_Quorum64 = 64,
+  PGT_Synod3 = 3,
+  PGT_Synod5 = 5,
+  PGT_Synod64 = 64,
 };
 
 enum PaxosState {
@@ -29,6 +29,14 @@ enum PaxosState {
   kPaxosState_COMMIT_FAILED = 8,
   kPaxosState_INVALID_PROPOSAL = 9,
   kPaxosState_LOCAL_LAG_BEHIND = 10,
+  kPaxosState_REMOTE_LAG_BEHIND = 11,
+  kPaxosState_FAST_ACCEPT_FAILED = 12,
+
+  // state of proposer
+  kPaxosState_PREPARING = 21,
+  kPaxosState_PROMISING = 22,
+  kPaxosState_ACCEPTING = 23,
+  kPaxosState_CHOOSING = 24,
 };
 
 enum PaxosMsgType {
@@ -46,13 +54,14 @@ enum PaxosMsgType {
 
 enum PaxosErrCode {
   kErrCode_OK = 0,
-  kErrCode_OOM = -3001,
-  kErrCode_TIMEOUT = -3002,
-  kErrCode_PREPARE_NOT_QUORAUM = -3003,
-  kErrCode_ACCEPT_NOT_QUORAUM = -3004,
-  kErrCode_CONN_FAIL = -3005,
-  kErrCode_PLOG_NOT_EXIST = -3006,
-  kErrCode_PREPARE_PEER_VALUE = -3007,    // prepare return peer's value
+  kErrCode_FIRST_INTERNAL_ERR = -30000,
+  kErrCode_OOM = -30001,
+  kErrCode_TIMEOUT = -30002,
+  kErrCode_PREPARE_NOT_QUORAUM = -30003,
+  kErrCode_ACCEPT_NOT_QUORAUM = -30004,
+  kErrCode_CONN_FAIL = -30005,
+  kErrCode_PLOG_NOT_EXIST = -30006,
+  kErrCode_PREPARE_PEER_VALUE = -30007,   // prepare return peer's value
   kErrCode_INVALID_PLOG_DATA = -30008,    // invalid formated plog data
   kErrCode_UNMARSHAL_PLOG_FAIL = -30009,  // unmarshal plog fail
   kErrCode_WORKER_NOT_STARTED = -30010,
@@ -65,9 +74,19 @@ enum PaxosErrCode {
   kErrCode_ENTRY_NOT_EXIST = -30017,
   kErrCode_ENTRY_NOT_FOUND = -30018,
   kErrCode_ACCEPTOR_QUEUE_FULL = -30019,
+  kErrCode_REMOTE_NEED_CATCHUP = -30020,
+  kErrCode_WORKING_IN_PROPGRESS = -30021,
+  kErrCode_PROPOSER_QUEUE_FULL = -30022,
+  kErrCode_SETUP_TIMEOUT_FAIL = -30023,
+  kErrCode_PEER_ACCEPT_FAIL = -30024,    // prepare return peer's value
+  kErrCode_INVALID_ACCEPT_RSP = -30025,  // prepare return peer's value
+  kErrCode_PEER_ACCEPT_REJECTED = -30026,
+  kErrCode_PEER_ACCEPT_OTHER_VALUE = -30027,
+  kErrCode_PREPARE_REJECTED = -30008,  // prepare return peer's value
+  kErrCode_LAST_INTERNAL_ERR = -100000,
 };
 
-constexpr int MAX_ACCEPTOR_NUM = 32;
+constexpr int MAX_ACCEPTOR_NUM = 7;
 
 struct Proposal {
   uint64_t pid_;   // proposal id ,pid == 0 indicates a read probe
@@ -93,7 +112,7 @@ struct PaxosMsg {
   uint32_t type_;
   uint32_t version_;
   uint32_t from_;  // svr id
-  uint32_t errcode_;
+  int32_t errcode_;
   uint64_t reqid_;   // rpc id
   uint8_t data_[1];  // struct hack
 } __attribute__((packed, aligned(1)));

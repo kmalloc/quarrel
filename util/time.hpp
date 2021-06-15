@@ -1,6 +1,8 @@
-#include <sys/time.h>
+#ifndef __QUARREL_TIME_H__
+#define __QUARREL_TIME_H__
 
 #include <stdint.h>
+#include <sys/time.h>
 
 namespace quarrel {
 
@@ -12,3 +14,5 @@ inline uint64_t GetCurrTimeUS() {
 }
 
 }  // namespace quarrel
+
+#endif

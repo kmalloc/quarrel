@@ -6,81 +6,54 @@
 namespace quarrel {
 
 Acceptor::Acceptor(std::shared_ptr<Configure> config)
-    : config_(std::move(config)) {}
+    : wpool_([this](PaxosRequest d) { return doHandleMsg(std::move(d)); }), config_(std::move(config)) {}
 
 Acceptor::~Acceptor() { StopWorker(); }
 
 int Acceptor::StartWorker() {
   assert(pmn_);
-  if (started_) return kErrCode_WORKER_ALREADY_STARTED;
 
   auto num = config_->acceptor_worker_count_;
   assert(config_->acceptor_worker_count_ < config_->plog_inst_num_);
 
-  run_ = 1;
-  workers_ = std::vector<WorkerData>(num);
-
-  for (auto i = 0u; i < num; i++) {
-    auto wd = &workers_[i];
-    wd->wg_.Reset(1);
-    wd->pending_ = 0;
-    wd->mq_.Init(config_->worker_msg_queue_sz_);
-    wd->th_ = std::thread(&Acceptor::workerProc, this, i);
-  }
-
-  started_ = true;
+  wpool_.StartWorker(num, config_->worker_msg_queue_sz_);
   return kErrCode_OK;
 }
 
 int Acceptor::StopWorker() {
-  run_ = 0;
-  for (auto i = 0u; i < workers_.size(); i++) {
-    workers_[i].wg_.Notify();
-    workers_[i].th_.join();
-  }
-  started_ = false;
+  wpool_.StopWorker();
   return kErrCode_OK;
 }
 
-int Acceptor::AddMsg(std::shared_ptr<PaxosMsg> msg, ResponseCallback cb) {
-  if (!started_) return kErrCode_WORKER_NOT_STARTED;
+std::future<int> Acceptor::AddMsgAsync(std::shared_ptr<PaxosMsg> msg) {
+  auto pms = std::make_shared<std::promise<int>>();
 
+  auto ret = pms->get_future();
+  auto cb = [=](std::shared_ptr<PaxosMsg> m) mutable { pms->set_value(m->errcode_);return 0; };
+  auto ret2 = AddMsg(std::move(msg), std::move(cb));
+  if (ret2) {
+    auto m2 = AllocProposalMsg(0);
+    m2->errcode_ = ret2;
+    cb(std::move(m2));
+  }
+
+  return ret;
+}
+
+int Acceptor::AddMsg(std::shared_ptr<PaxosMsg> msg, ResponseCallback cb) {
   auto pp = GetProposalFromMsg(msg.get());
   auto pinst = pp->plid_;
-  auto idx = pinst % workers_.size();
 
   PaxosRequest req;
   req.cb_ = std::move(cb);
   req.msg_ = std::move(msg);
 
-  auto ret = workers_[idx].mq_.Enqueue(std::move(req), false);
+  auto ret = wpool_.AddWork(pinst, std::move(req));
   if (ret) {
     return kErrCode_ACCEPTOR_QUEUE_FULL;
   }
 
-  if (workers_[idx].pending_.fetch_add(1) == 0) {
-    workers_[idx].wg_.Notify();
-  }
-
   return kErrCode_OK;
-}
-
-int Acceptor::workerProc(int workerid) {
-  auto queue = &workers_[workerid];
-  using QueueType = LockFreeQueue<PaxosRequest>;
-
-  while (run_ > 0) {
-    PaxosRequest req;
-    if (queue->mq_.Dequeue(req, false) == QueueType::RT_EMPTY) {
-      queue->wg_.Wait(100);
-      continue;
-    }
-
-    doHandleMsg(std::move(req));
-    queue->pending_.fetch_sub(1);
-  }
-
-  return 0;
 }
 
 int Acceptor::doHandleMsg(PaxosRequest req) {
@@ -126,10 +99,27 @@ void Acceptor::doCatchupFromPeer(Proposal& pp) {
   (void)pp;
 }
 
-int Acceptor::CheckLocalAndMayTriggerCatchup(const Proposal& pp) {
+void Acceptor::TriggerLocalCatchup() {
   // FIXME
-  (void)pp;
-  return 0;
+}
+
+int Acceptor::CheckLocalAndMayTriggerCatchup(const Proposal& pp) {
+  auto pinst = pp.plid_;
+  auto entry = pp.pentry_;
+  auto remote_last_chosen = pp.last_chosen_;
+
+  auto local_last_chosen = pmn_->GetMaxChosenEntry(pinst);
+  if (local_last_chosen != ~0ull && local_last_chosen >= entry) {
+    return kErrCode_REMOTE_NEED_CATCHUP;
+  }
+
+  if (remote_last_chosen > local_last_chosen) {
+    TriggerLocalCatchup();
+    pmn_->SetGlobalMaxChosenEntry(pinst, remote_last_chosen);
+    return kErrCode_NEED_CATCHUP;
+  }
+
+  return kErrCode_OK;
 }
 
 std::shared_ptr<PaxosMsg> Acceptor::handlePrepareReq(Proposal& pp) {
@@ -146,7 +136,13 @@ std::shared_ptr<PaxosMsg> Acceptor::handlePrepareReq(Proposal& pp) {
   auto ret = CheckLocalAndMayTriggerCatchup(pp);
   if (ret) {
     errcode = ret;
-    status = kPaxosState_LOCAL_LAG_BEHIND;
+    if (ret == kErrCode_NEED_CATCHUP) {
+      status = kPaxosState_LOCAL_LAG_BEHIND;
+    } else if (ret == kErrCode_REMOTE_NEED_CATCHUP) {
+      status = kPaxosState_REMOTE_LAG_BEHIND;
+    } else {
+      assert(0);
+    }
   } else {
     auto& ent = pmn_->GetEntryAndCreateIfNotExist(pinst, entry);
     const auto& existed_pp = ent.GetProposal();
@@ -154,6 +150,10 @@ std::shared_ptr<PaxosMsg> Acceptor::handlePrepareReq(Proposal& pp) {
 
     if (existed_pp) {
       // largest last vote
+      // if pid of accepted value > incoming pid
+      // we can just reject it as well.
+      // but here we don't do that since proposer will check response pid.
+      // and reject client anyway.
       vsize = existed_pp->size_;
       from_pp = existed_pp.get();
       status = kPaxosState_ACCEPTED;
@@ -161,6 +161,7 @@ std::shared_ptr<PaxosMsg> Acceptor::handlePrepareReq(Proposal& pp) {
       // reject for previous promise
       vsize = existed_promise->size_;
       from_pp = existed_promise.get();
+      // errcode = kErrCode_PREPARE_REJECTED;
     } else {
       // a new proposal request
       vsize = pp.size_;
@@ -175,8 +176,6 @@ std::shared_ptr<PaxosMsg> Acceptor::handlePrepareReq(Proposal& pp) {
         vsize = 0;
         errcode = kErrCode_WRITE_PLOG_FAIL;
         status = kPaxosState_PROMISED_FAILED;
-      } else {
-        pp.status_ = kPaxosState_PREPARED;
       }
     }
   }
@@ -296,7 +295,14 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
       }
     }
   } else {
-    // FIXME: #0 proposal optimization.
+    // #0 proposal optimization.
+    pp.status_ = kPaxosState_ACCEPTED;
+    if (pmn_->SetAccepted(pp) == kErrCode_OK) {
+      accepted = true;
+    } else {
+      errcode = kErrCode_WRITE_PLOG_FAIL;
+      pp.status_ = kPaxosState_FAST_ACCEPT_FAILED;
+    }
   }
 
   memcpy(rpp, accepted_pp, ProposalHeaderSz);

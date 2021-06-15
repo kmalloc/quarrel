@@ -23,8 +23,9 @@ struct DummyLocalConn : public LocalConn {
     auto req2 = CloneProposalMsg(*data.data_.get());
     rsp->from_ = addr_.id_;
     rsp->type_ = rsp->type_ + 1;
+    auto reqpp = GetProposalFromMsg(req2.get());
 
-    if (req2->type_ == kMsgType_PREPARE_REQ && fake_rsp_) {
+    if (reqpp->pid_ > 0 && req2->type_ == kMsgType_PREPARE_REQ && fake_rsp_) {
       fake_rsp_->from_ = addr_.id_;
       fake_rsp_->reqid_ = req2->reqid_;
       fake_rsp_->type_ = kMsgType_PREPARE_RSP;
@@ -32,7 +33,7 @@ struct DummyLocalConn : public LocalConn {
       auto rspfp = GetProposalFromMsg(fake_rsp_.get());
       rspfp->plid_ = reqfp->plid_;
       rspfp->pentry_ = reqfp->pentry_;
-      rspfp->pid_ = reqfp->pid_ - addr_.id_;
+      rspfp->pid_ = reqfp->pid_ - 1;
       rspfp->value_id_ = reqfp->value_id_ + 1;
       rsp = std::move(fake_rsp_);
       LOG_INFO << "acceptor(" << addr_.id_
@@ -40,7 +41,9 @@ struct DummyLocalConn : public LocalConn {
                << ", rsp pid:" << rspfp->pid_ << ", req vsz:" << reqfp->size_
                << ", rsp vsz:" << rspfp->size_
                << ", req vid:" << rspfp->value_id_
-               << ", rsp vid:" << rspfp->value_id_;
+               << ", rsp vid:" << rspfp->value_id_
+               << ", @(" << rspfp->plid_ << "," << rspfp->pentry_ << "), proposer:"
+               << rspfp->proposer_;
     }
 
     auto pp2 = GetProposalFromMsg(req2.get());
@@ -57,10 +60,12 @@ struct DummyLocalConn : public LocalConn {
     auto rspfp = GetProposalFromMsg(rsp.get());
 
     if (req2->type_ == kMsgType_PREPARE_REQ) {
+      chosen_ = false;
       promised_ = req2;
       rspfp->opaque_++;
       rspfp->status_ = kPaxosState_PROMISED;
     } else if (req2->type_ == kMsgType_ACCEPT_REQ) {
+      chosen_ = false;
       accepted_ = req2;
       pp2->opaque_++;
       rspfp->opaque_++;
@@ -69,15 +74,19 @@ struct DummyLocalConn : public LocalConn {
       chosen_ = true;
       rspfp->last_chosen_ = rspfp->pentry_;
       rspfp->status_ = kPaxosState_CHOSEN;
-      if (chosen_notify_) {
-        chosen_notify_(req2);
-      }
+    } else {
+      chosen_ = false;
     }
 
     LOG_INFO << "acceptor(" << addr_.id_ << "), local conn returns rsp, type:" << rsp->type_
-             << ", reqid:" << rspfp->pid_ << ", pinst:" << rspfp->plid_ << ", entry:" << rspfp->pentry_;
+             << ", rsp opaque:" << rspfp->opaque_ << ", reqid:" << rspfp->pid_ << ", @("
+             << rspfp->plid_ << "," << rspfp->pentry_ << "), req proposer:" << rspfp->proposer_;
 
     data.cb_(std::move(rsp));
+
+    if (chosen_ && chosen_notify_) {
+      std::thread{[=]() { chosen_notify_(req2); }}.detach();
+    }
     return 0;
   }
 
@@ -101,28 +110,42 @@ struct DummyRemoteConn : public RemoteConn {
   virtual ~DummyRemoteConn() {}
 
   virtual int DoWrite(std::shared_ptr<PaxosMsg> req) {
-    auto rsper = [this](std::shared_ptr<PaxosMsg> msg) mutable {
-      auto tm = std::chrono::milliseconds(1);
+    auto rsper = [this](std::shared_ptr<PaxosMsg> msg, bool chosen) mutable {
+      auto tm = std::chrono::microseconds(10);
       std::this_thread::sleep_for(tm);
 
-      this->HandleRecv(msg);
       auto pp = GetProposalFromMsg(msg.get());
-
       LOG_INFO << "acceptor(" << this->addr_.id_
                << ") dummy rsp from remoteConn, type: " << msg->type_
                << ",msg:(reqid-" << msg->reqid_ << ", opaque-" << pp->opaque_
                << ", vid-" << pp->value_id_ << ",vsz:" << pp->size_ << ", pid-"
-               << pp->pid_ << ")@(" << pp->plid_ << ", " << pp->pentry_ << ")";
+               << pp->pid_ << ")@(" << pp->plid_ << ", " << pp->pentry_ << "), req proposer:" << pp->proposer_;
+
+      auto msg2 = CloneProposalMsg(*msg);
+      this->HandleRecv(std::move(msg2));
+
+      if (chosen && chosen_notify_ && ((pp->opaque_ / 10) % 1000) == 233) {
+        chosen_notify_(msg);
+      }
     };
 
     auto req2 = CloneProposalMsg(*req.get());
     auto rsp = CloneProposalMsg(*req.get());
+
     rsp->from_ = addr_.id_;
     rsp->type_ = req->type_ + 1;
 
+    auto pp = GetProposalFromMsg(req.get());
+
+    LOG_INFO << "acceptor(" << this->addr_.id_
+             << ") dummy remoteConn DoWrite, type: " << req->type_
+             << ",msg:(reqid-" << req->reqid_ << ", opaque-" << pp->opaque_
+             << ", vid-" << pp->value_id_ << ",vsz:" << pp->size_ << ", pid-"
+             << pp->pid_ << ")@(" << pp->plid_ << ", " << pp->pentry_ << "), req proposer:" << pp->proposer_;
+
     auto reqfp = GetProposalFromMsg(req2.get());
 
-    if (req2->type_ == kMsgType_PREPARE_REQ && fake_rsp_) {
+    if (reqfp->pid_ > 0 && req2->type_ == kMsgType_PREPARE_REQ && fake_rsp_) {
       fake_rsp_->from_ = addr_.id_;
       fake_rsp_->reqid_ = req2->reqid_;
       fake_rsp_->type_ = kMsgType_PREPARE_RSP;
@@ -147,7 +170,8 @@ struct DummyRemoteConn : public RemoteConn {
     auto rpp = GetProposalFromMsg(rsp.get());
     if ((rejectAccept_ && req2->type_ == kMsgType_ACCEPT_REQ) ||
         (rejectPrepare_ && req2->type_ == kMsgType_PREPARE_REQ)) {
-      LOG_ERR << "reject from remote";
+      LOG_ERR << "acceptor(" << addr_.id_ << ")@(" << rpp->plid_ << ","
+              << rpp->pentry_ << ") rejected from remote";
 
       auto pp2 = GetProposalFromMsg(req2.get());
       rpp->pid_ = pp2->pid_ + 1;
@@ -158,10 +182,12 @@ struct DummyRemoteConn : public RemoteConn {
     }
 
     if (req2->type_ == kMsgType_PREPARE_REQ) {
+      chosen_ = false;
       rpp->opaque_++;
       promised_ = req2;
       rpp->status_ = kPaxosState_PROMISED;
     } else if (req2->type_ == kMsgType_ACCEPT_REQ) {
+      chosen_ = false;
       rpp->opaque_++;
       reqfp->opaque_++;
       accepted_ = req2;
@@ -170,12 +196,14 @@ struct DummyRemoteConn : public RemoteConn {
       chosen_ = true;
       rpp->status_ = kPaxosState_CHOSEN;
       rpp->last_chosen_ = rpp->pentry_;
-      if (chosen_notify_) {
-        chosen_notify_(req2);
-      }
+    } else {
+      chosen_ = false;
     }
 
-    std::async(std::launch::async, rsper, std::move(rsp));
+    // async will block
+    // std::async(std::launch::async, rsper, std::move(rsp));
+    std::thread{rsper, std::move(rsp), chosen_}.detach();
+
     return kErrCode_OK;
   }
 
@@ -192,8 +220,7 @@ struct DummyRemoteConn : public RemoteConn {
 
 TEST(proposer, doPropose) {
   auto config = std::make_shared<Configure>();
-  config->timeout_ = 8;  // 8ms
-  config->pid_cookie_ = 8; // prepare id > 8
+  config->timeout_ = 18;  // 8ms
   config->local_ = {0, ConnType_LOCAL, "xxxx:yyy"};
   config->plog_inst_num_ = 666;
   config->peer_.push_back({1, ConnType_REMOTE, "aaaa:bb"});
@@ -202,8 +229,7 @@ TEST(proposer, doPropose) {
   Proposer pp(config);
 
   auto config2 = std::make_shared<Configure>();
-  config2->timeout_ = 8;     // 8ms
-  config2->pid_cookie_ = 8;  // prepare id > 8
+  config2->timeout_ = 18;  // 8ms
   config2->local_ = {2, ConnType_LOCAL, "xxxx:yyy"};
   config2->plog_inst_num_ = 666;
   config2->peer_.push_back({1, ConnType_REMOTE, "aaaa:bb"});
@@ -293,11 +319,23 @@ TEST(proposer, doPropose) {
   fp->status_ = kPaxosState_PROMISED;
   memcpy(fp->data_, "miliao dummy", 12);
 
-  dr1->fake_rsp_ = fake_rsp;
+  // must return by local conn.
+  // since local conn is guranteed to reponse faster than remote conn.
+  // and thus guarantee that last vote will come first.
+  dlocal->fake_rsp_ = fake_rsp;
+
+  dr1->accepted_.reset();
+  dr2->accepted_.reset();
+  dlocal->accepted_.reset();
 
   LOG_INFO << "#########last vote test##########";
 
   ASSERT_EQ(kErrCode_PREPARE_PEER_VALUE, pp.Propose(0xbadf00d, "dummy value", 11));
+
+  // prepare peer value returns early,
+  while (kErrCode_WORKING_IN_PROPGRESS == pp.Propose(1111111, "", 11)) continue;
+
+  LOG_INFO << "read probe ret:" << pp.Propose(222222, "", 11);
 
   ASSERT_EQ(0, dr1->accepted_->from_);
   ASSERT_EQ(0, dr2->accepted_->from_);
@@ -345,7 +383,12 @@ TEST(proposer, doPropose) {
 
   LOG_INFO << "@@@@@@test multiple last vote@@@@@";
 
+  config->pid_cookie_ = 8;  // prepare id > 8
   ASSERT_EQ(kErrCode_PREPARE_PEER_VALUE, pp.Propose(0xbadf00d, "dummy value", 22));
+
+  while (kErrCode_WORKING_IN_PROPGRESS == pp.Propose(1111111, "", 22)) continue;
+
+  config->pid_cookie_ = 0;
 
   auto p41 = reinterpret_cast<Proposal*>(dr1->accepted_->data_);
   auto p42 = reinterpret_cast<Proposal*>(dr2->accepted_->data_);
@@ -403,7 +446,7 @@ TEST(proposer, doPropose) {
   dr2->rejectPrepare_ = false;
 
   LOG_INFO << "test accept reject";
-  ASSERT_EQ(kErrCode_ACCEPT_NOT_QUORAUM, pp.Propose(0xbadf00d, "dummy value", 19));
+  ASSERT_EQ(kErrCode_PEER_ACCEPT_REJECTED, pp.Propose(0xbadf00d, "dummy value", 19));
 
   dr1->rejectAccept_ = false;
   dr1->rejectPrepare_ = false;
@@ -457,7 +500,7 @@ TEST(proposer, doPropose) {
 
   dr1->rejectAccept_ = true;
   dr2->rejectAccept_ = true;
-  ASSERT_EQ(kErrCode_ACCEPT_NOT_QUORAUM, pp.Propose(233, "dummy value", 2));
+  ASSERT_EQ(kErrCode_PEER_ACCEPT_REJECTED, pp.Propose(233, "dummy value", 2));
   auto pp16 = reinterpret_cast<Proposal*>(dr1->accepted_->data_);
   ASSERT_EQ(1 + pp15->pentry_, pp16->pentry_);
   ASSERT_EQ(233 + 1, pp16->opaque_);
@@ -483,32 +526,42 @@ TEST(proposer, doPropose) {
   dr1->rejectReadProbe_ = false;
   dr2->rejectReadProbe_ = false;
 
-  auto chosen_notify1 = [&](std::shared_ptr<PaxosMsg> m) { if (m->from_ != config->local_.id_) pp.OnEntryChosen(std::move(m));return 0; };
-  auto chosen_notify2 = [&](std::shared_ptr<PaxosMsg> m) { if (m->from_ != config2->local_.id_) pps.OnEntryChosen(std::move(m));return 0; };
+  WaitGroup wg(2);
+
+  auto chosen_notify1 = [&](std::shared_ptr<PaxosMsg> m) { pp.OnEntryChosen(m); wg.Notify(); return 0; };
+  auto chosen_notify2 = [&](std::shared_ptr<PaxosMsg> m) { pps.OnEntryChosen(m); wg.Notify();return 0; };
 
   dr1->chosen_notify_ = chosen_notify1;
   dr2->chosen_notify_ = chosen_notify2;
 
   // test write from slave
-  ASSERT_EQ(kErrCode_OK, pp.Propose(233, "dummy value", 2));
+  LOG_INFO << "test write from save, starting by launching write from master(pp), then slave write(pps)";
+
+  ASSERT_EQ(kErrCode_OK, pp.Propose(662333, "chosennotify", 2));  // write from master
   auto pp21 = reinterpret_cast<Proposal*>(dr1->accepted_->data_);
   auto entry21 = pp21->pentry_;
+  wg.Wait(30000);
 
-  ASSERT_EQ(kErrCode_OK, pps.Propose(233, "dummy value", 2));
+  ASSERT_EQ(kErrCode_OK, pps.Propose(772333, "chosennotify", 2));  // write from slave
   auto pp22 = reinterpret_cast<Proposal*>(dr1->accepted_->data_);
   auto entry22 = pp22->pentry_;
-  ASSERT_EQ(233 + 2, pp22->opaque_);
+  ASSERT_EQ(772333 + 2, pp22->opaque_);
   ASSERT_EQ(entry21 + 1, entry22);
+  wg.Wait(30000);
 
-  ASSERT_EQ(kErrCode_OK, pp.Propose(233, "dummy value", 2));
+  ASSERT_EQ(kErrCode_OK, pp.Propose(882333, "chosennotify", 2));
   auto pp23 = reinterpret_cast<Proposal*>(dr1->accepted_->data_);
   auto entry23 = pp23->pentry_;
-  ASSERT_EQ(233 + 2, pp23->opaque_);
+  ASSERT_EQ(882333 + 2, pp23->opaque_);
   ASSERT_EQ(entry22 + 1, entry23);
+  wg.Wait(30000);
 
-  ASSERT_EQ(kErrCode_OK, pp.Propose(233, "dummy value", 2));
+  ASSERT_EQ(kErrCode_OK, pp.Propose(992333, "chosennotify", 2));
   auto pp24 = reinterpret_cast<Proposal*>(dr1->accepted_->data_);
   auto entry24 = pp24->pentry_;
-  ASSERT_EQ(233 + 1, pp24->opaque_);
+  ASSERT_EQ(992333 + 1, pp24->opaque_);
   ASSERT_EQ(entry23 + 1, entry24);
+  wg.Wait(30000);
+
+  LOG_ERR << "#################done testing############################";
 }

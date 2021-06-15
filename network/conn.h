@@ -16,6 +16,7 @@
 namespace quarrel {
 
 using ResponseCallback = std::function<int(std::shared_ptr<PaxosMsg>)>;
+
 using RequestHandler =
     std::function<int(std::shared_ptr<PaxosMsg> ptr, ResponseCallback cb)>;
 
@@ -82,40 +83,62 @@ class RemoteConn : public Conn {
   // customization point: implementation needed here
   // WARNING: this function may be called from multiple threads.
   // make sure it is thread safe.
+  // also implementation of this function is expected to be ASYNCHRONOUS.
   virtual int DoWrite(std::shared_ptr<PaxosMsg> msg) = 0;
 
   virtual int DoRpcRequest(RpcReqData req) {
-    req.data_->reqid_ = reqid_.GetAndInc();
-    reqToRemote_.Put(req.data_->reqid_, req);
+    {
+      std::lock_guard<std::mutex> l(lock_);
+      req.data_->reqid_ = reqid_.GetAndInc();
+      reqToRemote_.Put(req.data_->reqid_, req);
+    }
+
     auto ret = DoWrite(req.data_);
+
     if (ret != kErrCode_OK) {
+      std::lock_guard<std::mutex> l(lock_);
       reqToRemote_.Del(req.data_->reqid_);
       return ret;
     }
+
     return kErrCode_OK;
   }
 
   // HandleRecv handle msg received from the connected acceptor.
   virtual int HandleRecv(std::shared_ptr<PaxosMsg> req) {
-    auto rd = reqToRemote_.GetPtr(req->reqid_);
+    const RpcReqData* rd = NULL;
+    {
+      std::lock_guard<std::mutex> l(lock_);
+      rd = reqToRemote_.GetPtr(req->reqid_);
+    }
 
-    auto noop = [this](std::shared_ptr<PaxosMsg> m) {
+    auto write_rsp = [this](std::shared_ptr<PaxosMsg> m) {
       return DoWrite(std::move(m));
     };
 
     if (!rd) {
-      return onReq_(std::move(req), noop);
+      // handle incoming request
+      return onReq_(std::move(req), write_rsp);
     }
 
+    // handle response for previous req
     auto id = req->reqid_;
     rd->cb_(std::move(req));
-    reqToRemote_.Del(id);
+
+    {
+      std::lock_guard<std::mutex> l(lock_);
+      reqToRemote_.Del(id);
+    }
+
     return 0;
   }
 
  private:
+  std::mutex lock_;
   IdGenByDate reqid_;
   RequestHandler onReq_;
+
+  // TODO: reduce global lock holding
   LruMap<uint64_t, RpcReqData> reqToRemote_;
 };
 
