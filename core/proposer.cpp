@@ -16,6 +16,35 @@ struct BatchRpcContext {
       : wg_(expect_rsp_count), rsp_count_(0) {}
 };
 
+struct InstanceState {
+  // in-memory state of each paxos instance.
+  // the very first proposal for each instance at startup requires a second try.
+  // since the first try will always fail.
+  // same logic applys for proposing from slave for the moment
+  // a potential optimization for this particular case(write from slave) can be achieved by receiving chosen msg from acceptor.
+  uint32_t proposer_id_;  // proposer id for current proposer, this is varied for each instance.
+  uint32_t last_chosen_from_;
+  uint64_t last_chosen_entry_;
+
+  // idgen will be reset when the latest entry is chosen
+  IdGen ig_;         // proposal id generator
+  IdGenByDate vig_;  // value id generator
+
+  // instance state: 0 not used 1 waiting for timeout, 2 timeouted 3 canceled
+  uint32_t state_;
+
+  // ongoing req for acceptors
+  // std::shared_ptr<PaxosMsg> req_;
+
+  // rsp from acceptors for ongoing ballot
+  std::shared_ptr<PaxosMsg> rsp_;
+
+  InstanceState() : proposer_id_(0), last_chosen_from_(~0u), last_chosen_entry_(0), ig_(0, 0), vig_(0xff, 1) {}
+
+  InstanceState(int pid, int proposer_count)
+      : proposer_id_(pid), last_chosen_from_(~0u), last_chosen_entry_(0), ig_(pid + 1, proposer_count), vig_(0xff, 1) {}
+};
+
 Proposer::Proposer(std::shared_ptr<Configure> config)
     : config_(std::move(config)) {
   auto svrid = config_->local_.id_;
@@ -24,14 +53,16 @@ Proposer::Proposer(std::shared_ptr<Configure> config)
 
   auto mapper = PaxosGroupBase::CreateGroup(config_->total_proposer_);
 
-  states_.reserve(icount);
+  states_.reset(new InstanceState[icount]);
   locks_ = std::vector<std::mutex>(icount);
 
   for (auto i = 0ull; i < icount; i++) {
     auto pid = mapper->GetMemberIdBySvrId(i, svrid);  // proposer id
-    states_.emplace_back(pid, pcount);
+    states_[i] = InstanceState(pid, pcount);
   }
 }
+
+Proposer::~Proposer() {}
 
 std::shared_ptr<PaxosMsg> Proposer::allocPaxosMsg(uint64_t pinst, uint64_t opaque, uint32_t value_size) {
   auto pm = AllocProposalMsg(value_size);
@@ -130,7 +161,7 @@ bool Proposer::canSkipPrepare(const Proposal& pp) {
   //2. #0 proposal for current entry.
   auto pinst = pp.plid_;
   auto entry = pp.pentry_;
-  const auto& state = states_[pinst % states_.size()];
+  const auto& state = states_[pinst % locks_.size()];
 
   // acceptor id of master must be the smallest of the synod(set of acceptors).
   // this ensure one-phase paxos will not succeed in the case of lagged-behind master try to propose to an entry which already has accepted value in remote peers.
@@ -225,6 +256,8 @@ int Proposer::Propose(uint64_t opaque, const std::string& val, uint64_t pinst) {
   if (val.empty() || !canSkipPrepare(*pp)) {
     // empty val indicates a read probe which must always perform prepare()
     ret = doPrepare(pm);
+  } else {
+    // TODO
   }
 
   if (ret != kErrCode_OK && ret != kErrCode_PREPARE_PEER_VALUE) {

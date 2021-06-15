@@ -70,7 +70,7 @@ enum PaxosErrCode {
   kErrCode_REMOTE_NEED_CATCHUP = -30020,
 };
 
-constexpr int MAX_ACCEPTOR_NUM = 32;
+constexpr int MAX_ACCEPTOR_NUM = 7;
 
 struct Proposal {
   uint64_t pid_;   // proposal id ,pid == 0 indicates a read probe
