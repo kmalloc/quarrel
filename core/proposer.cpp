@@ -266,6 +266,18 @@ int Proposer::doBatchRpcRequest(std::shared_ptr<PaxosMsg>& pm) {
   return kErrCode_OK;
 }
 
+bool Proposer::addTimeout(uint64_t pinst, uint64_t entry, uint64_t term) {
+  auto notify = [=](uint64_t opaque) {
+    assert(term == opaque);
+    if (addRpcResponse(pinst, entry, NULL, term) != kErrCode_OK) {
+      // timeout event must be handled
+      addTimeout(pinst, entry, term);
+    }
+  };
+
+  return timeout_.AddTimeout(term, config_->timeout_ * 2, notify);
+}
+
 void Proposer::setupWaitState(uint64_t pinst, uint64_t entry, uint32_t state, std::promise<int>* promise, std::shared_ptr<PaxosMsg>* pm) {
   states_[pinst].rsp_count_ = 0;
   states_[pinst].valid_rsp_count_ = 0;
@@ -280,16 +292,7 @@ void Proposer::setupWaitState(uint64_t pinst, uint64_t entry, uint32_t state, st
     auto pp = GetProposalFromMsg(states_[pinst].req_.get());
 
     auto term = pp->term_;
-
-    TimingWheelNotifier tm_notify = [=, &tm_notify](uint64_t opaque) {
-      assert(term == opaque);
-      if (addRpcResponse(pinst, entry, NULL, term) != kErrCode_OK) {
-        // timeout event must be handled
-        timeout_.AddTimeout(term, config_->timeout_, tm_notify);
-      }
-    };
-
-    if (!timeout_.AddTimeout(term, 2 * config_->timeout_, tm_notify)) {
+    if (!addTimeout(pinst, entry, term)) {
       states_[pinst].ret_.set_value(kErrCode_SETUP_TIMEOUT_FAIL);
       LOG_ERR << "setup timeout failed, pinst:" << pinst << ", entry:" << entry
               << ", state:" << state << ", term:" << term;

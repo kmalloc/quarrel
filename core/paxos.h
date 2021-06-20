@@ -35,12 +35,9 @@ class Paxos {
   // users need to handle these instances mapping from global to local.
   // from a synod's point of view, it processes only a small consecutive array of instances.
   // but globally, every synod handles unique set of consecutive paxos instances.
-  int Propose(uint64_t opaque, const std::string& value,
-              uint64_t paxos_inst = 0);
+  int Propose(uint64_t opaque, const std::string& value, uint64_t paxos_inst = 0);
 
-  // TODO maybe std::async for a simple impl
-  std::future<int> ProposeAsync(uint64_t opaque, const std::string& value,
-                                uint64_t paxos_inst = 0);
+  std::future<int> ProposeAsync(uint64_t opaque, const std::string& value, uint64_t paxos_inst = 0);
 
  private:
   Paxos(const Paxos&) = delete;

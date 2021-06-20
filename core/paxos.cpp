@@ -33,4 +33,9 @@ int Paxos::Stop() {
 int Paxos::Propose(uint64_t opaque, const std::string& value, uint64_t pinst) {
   return proposer_.Propose(opaque, value, pinst);
 }
+
+std::future<int> Paxos::ProposeAsync(uint64_t opaque, const std::string& value, uint64_t paxos_inst) {
+  return proposer_.ProposeAsync(opaque, value, paxos_inst);
+}
+
 }  // namespace quarrel

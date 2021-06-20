@@ -13,6 +13,7 @@
 #include <vector>
 #include <memory>
 #include <future>
+
 namespace quarrel {
 
 struct InstanceState;
@@ -53,6 +54,8 @@ class Proposer {
 
   int doBatchRpcRequest(std::shared_ptr<PaxosMsg>& pm);
   int addRpcResponse(uint64_t pinst, uint64_t entry, std::shared_ptr<PaxosMsg> m, uint64_t term);
+
+  bool addTimeout(uint64_t pinst, uint64_t entry, uint64_t term);
   void setupWaitState(uint64_t pinst, uint64_t entry, uint32_t state, std::promise<int>* promise, std::shared_ptr<PaxosMsg>* pm);
 
   struct RpcResponseMsg {

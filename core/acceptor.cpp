@@ -25,19 +25,18 @@ int Acceptor::StopWorker() {
   return kErrCode_OK;
 }
 
-std::future<int> Acceptor::AddMsgAsync(std::shared_ptr<PaxosMsg> msg) {
-  auto pms = std::make_shared<std::promise<int>>();
+std::future<std::shared_ptr<PaxosMsg>> Acceptor::AddMsgAsync(std::shared_ptr<PaxosMsg> msg) {
+  auto pms = std::make_shared<std::promise<std::shared_ptr<PaxosMsg>>>();
+  auto cb = [=](std::shared_ptr<PaxosMsg> m) mutable { pms->set_value(std::move(m));return 0; };
 
-  auto ret = pms->get_future();
-  auto cb = [=](std::shared_ptr<PaxosMsg> m) mutable { pms->set_value(m->errcode_);return 0; };
-  auto ret2 = AddMsg(std::move(msg), std::move(cb));
-  if (ret2) {
-    auto m2 = AllocProposalMsg(0);
-    m2->errcode_ = ret2;
-    cb(std::move(m2));
+  auto ret = AddMsg(std::move(msg), std::move(cb));
+  if (ret) {
+    auto m = AllocProposalMsg(0);
+    m->errcode_ = ret;
+    cb(std::move(m));
   }
 
-  return ret;
+  return pms->get_future();
 }
 
 int Acceptor::AddMsg(std::shared_ptr<PaxosMsg> msg, ResponseCallback cb) {

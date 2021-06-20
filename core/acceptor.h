@@ -21,15 +21,12 @@ class Acceptor {
 
   // An acceptor maintains several worker threads,
   // each thread waits on a msg queue designated to several plog instances,
-  // thread count must <= plog instance count,
-  // ensuring that each plog instance is mutated from one thread only.
   int StartWorker();
   int StopWorker();
 
-  std::future<int> AddMsgAsync(std::shared_ptr<PaxosMsg> m);
-
   // note: every request required a response.
   int AddMsg(std::shared_ptr<PaxosMsg> m, ResponseCallback cb);
+  std::future<std::shared_ptr<PaxosMsg>> AddMsgAsync(std::shared_ptr<PaxosMsg> m);
 
   // broadcast chosen msg
   // used to optimize proposer states
