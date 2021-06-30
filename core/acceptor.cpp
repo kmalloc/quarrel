@@ -71,7 +71,7 @@ int Acceptor::doHandleMsg(PaxosRequest req) {
     rsp = handleChosenReq(*pp);
     rsp->type_ = kMsgType_CHOSEN_RSP;
   } else if (mtype == kMsgType_CHORE_CATCHUP) {
-    doCatchupFromPeer(*pp);
+    doCatchupFromPeer();
   } else {
     rsp = std::make_shared<PaxosMsg>();
     memcpy(rsp.get(), req.msg_.get(), PaxosMsgHeaderSz);
@@ -93,13 +93,14 @@ int Acceptor::doHandleMsg(PaxosRequest req) {
   return kErrCode_OK;
 }
 
-void Acceptor::doCatchupFromPeer(Proposal& pp) {
+void Acceptor::doCatchupFromPeer() {
   // FIXME
-  (void)pp;
 }
 
 void Acceptor::TriggerLocalCatchup() {
-  // FIXME
+  auto req = AllocProposalMsg(0);
+  req->type_ = kMsgType_CHORE_CATCHUP;
+  AddMsg(std::move(req), [](std::shared_ptr<PaxosMsg>) { return 0; });
 }
 
 int Acceptor::CheckLocalAndMayTriggerCatchup(const Proposal& pp) {
@@ -113,8 +114,8 @@ int Acceptor::CheckLocalAndMayTriggerCatchup(const Proposal& pp) {
   }
 
   if (remote_last_chosen > local_last_chosen) {
-    TriggerLocalCatchup();
     pmn_->SetGlobalMaxChosenEntry(pinst, remote_last_chosen);
+    TriggerLocalCatchup();
     return kErrCode_NEED_CATCHUP;
   }
 
