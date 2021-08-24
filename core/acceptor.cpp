@@ -41,7 +41,7 @@ std::future<std::shared_ptr<PaxosMsg>> Acceptor::AddMsgAsync(std::shared_ptr<Pax
 
 int Acceptor::AddMsg(std::shared_ptr<PaxosMsg> msg, ResponseCallback cb) {
   auto pp = GetProposalFromMsg(msg.get());
-  auto pinst = pp->plid_;
+  auto pinst = pp->pinst_;
 
   PaxosRequest req;
   req.cb_ = std::move(cb);
@@ -71,7 +71,7 @@ int Acceptor::doHandleMsg(PaxosRequest req) {
     rsp = handleChosenReq(*pp);
     rsp->type_ = kMsgType_CHOSEN_RSP;
   } else if (mtype == kMsgType_CHORE_CATCHUP) {
-    doCatchupFromPeer();
+    doCatchupFromPeer(*pp);
   } else {
     rsp = std::make_shared<PaxosMsg>();
     memcpy(rsp.get(), req.msg_.get(), PaxosMsgHeaderSz);
@@ -93,18 +93,38 @@ int Acceptor::doHandleMsg(PaxosRequest req) {
   return kErrCode_OK;
 }
 
-void Acceptor::doCatchupFromPeer() {
+void Acceptor::doCatchupFromPeer(Proposal& pp) {
+  auto pinst = pp.pinst_;
+  auto target = pp.pentry_;
+  auto local_chosen = pmn_->GetMaxChosenEntry(pinst);
+  auto commit_entry = pmn_->GetMaxCommittedEntry(pinst);
+  auto global_chosen = pmn_->GetGlobalMaxChosenEntry(pinst);
+
+  (void)pinst;
+  (void)target;
+  (void)local_chosen;
+  (void)commit_entry;
+  (void)global_chosen;
+
+  // do local commit for entry commit_entry ~ local_chosen
+  // FIXME
+
+  // do catchup for entry from local_chosen+1 ~ global_chosen
   // FIXME
 }
 
-void Acceptor::TriggerLocalCatchup() {
+void Acceptor::TriggerLocalCatchup(uint64_t pinst, uint64_t target_entry) {
   auto req = AllocProposalMsg(0);
+  auto pp = GetProposalFromMsg(req.get());
+
+  pp->pinst_ = pinst;
+  pp->pentry_ = target_entry;
   req->type_ = kMsgType_CHORE_CATCHUP;
   AddMsg(std::move(req), [](std::shared_ptr<PaxosMsg>) { return 0; });
 }
 
 int Acceptor::CheckLocalAndMayTriggerCatchup(const Proposal& pp) {
-  auto pinst = pp.plid_;
+  auto pinst = pp.pinst_;
   auto entry = pp.pentry_;
   auto remote_last_chosen = pp.last_chosen_;
 
@@ -113,17 +133,21 @@ int Acceptor::CheckLocalAndMayTriggerCatchup(const Proposal& pp) {
     return kErrCode_REMOTE_NEED_CATCHUP;
   }
 
+  // catchup contains 2 parts:
+  // 1. commit globally accepted entry to db,
+  // 2. learn about the empty entry which already globally accepted.
+  // one important aspect to note is that: hole is allowed in the slave(no hole in master)
   if (remote_last_chosen > local_last_chosen) {
     pmn_->SetGlobalMaxChosenEntry(pinst, remote_last_chosen);
-    TriggerLocalCatchup();
-    return kErrCode_NEED_CATCHUP;
+    TriggerLocalCatchup(pinst, local_last_chosen + 1);
+    // return kErrCode_NEED_CATCHUP;
   }
 
   return kErrCode_OK;
 }
 
 std::shared_ptr<PaxosMsg> Acceptor::handlePrepareReq(Proposal& pp) {
-  auto pinst = pp.plid_;
+  auto pinst = pp.pinst_;
   auto entry = pp.pentry_;
   std::shared_ptr<PaxosMsg> rsp;
 
@@ -196,7 +220,7 @@ std::shared_ptr<PaxosMsg> Acceptor::handlePrepareReq(Proposal& pp) {
 }
 
 std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
-  auto pinst = pp.plid_;
+  auto pinst = pp.pinst_;
   auto entry = pp.pentry_;
   std::shared_ptr<PaxosMsg> rsp;
 
@@ -209,6 +233,8 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
   if (ret) {
     rsp->errcode_ = ret;
     rpp->status_ = kPaxosState_LOCAL_LAG_BEHIND;
+    rpp->last_chosen_from_ = uint16_t(~0u);
+    rpp->last_chosen_ = pmn_->GetMaxChosenEntry(pinst);
     return std::move(rsp);
   }
 
@@ -325,7 +351,7 @@ std::shared_ptr<PaxosMsg> Acceptor::handleAcceptReq(Proposal& pp) {
 }
 
 std::shared_ptr<PaxosMsg> Acceptor::handleChosenReq(Proposal& pp) {
-  auto pinst = pp.plid_;
+  auto pinst = pp.pinst_;
   auto entry = pp.pentry_;
 
   auto& ent = pmn_->GetEntryAndCreateIfNotExist(pinst, entry);

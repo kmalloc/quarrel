@@ -43,6 +43,7 @@ class Conn {
   int GetFd() const { return fd_; }
   int GetType() const { return type_; }
   const AddrInfo& GetAddr() const { return addr_; }
+  bool IsLocal() const { return type_ == ConnType_LOCAL; }
 
   // DoRpcRequest performs an *ASYNCHRONOUS* rpc reqeust to the connected
   // acceptor. user must provide a callback to handle the corresponding
@@ -105,11 +106,21 @@ class RemoteConn : public Conn {
   }
 
   // HandleRecv handle msg received from the connected acceptor.
+  // which may be a rsp for a previous req.
+  // or just a plain new request for local acceptor.
   virtual int HandleRecv(std::shared_ptr<PaxosMsg> req) {
-    const RpcReqData* rd = NULL;
+    RpcReqData* rd = NULL;
+    RpcReqData origin_req;
+
     {
+      // check if the received msg is a rsponse and get the previous request.
       std::lock_guard<std::mutex> l(lock_);
       rd = reqToRemote_.GetPtr(req->reqid_);
+      if (rd) {
+        origin_req = std::move(*rd);
+        rd = &origin_req;
+        reqToRemote_.Del(req->reqid_);
+      }
     }
 
     auto write_rsp = [this](std::shared_ptr<PaxosMsg> m) {
@@ -122,13 +133,7 @@ class RemoteConn : public Conn {
     }
 
     // handle response for previous req
-    auto id = req->reqid_;
     rd->cb_(std::move(req));
-
-    {
-      std::lock_guard<std::mutex> l(lock_);
-      reqToRemote_.Del(id);
-    }
 
     return 0;
   }
@@ -138,7 +143,8 @@ class RemoteConn : public Conn {
   IdGenByDate reqid_;
   RequestHandler onReq_;
 
-  // TODO: reduce global lock holding
+  // TODO: reduce global lock by sharding.
+  // generally this is not necessary, since each conn should be accessed from one thread only.
   LruMap<uint64_t, RpcReqData> reqToRemote_;
 };
 
@@ -159,15 +165,10 @@ class ConnMng {
     conn_creator_ = std::move(creator);
   }
 
-  std::unique_ptr<LocalConn>& GetLocalConn() { return local_conn_; }
-
-  // create if not exist
-  RemoteConn& GetRemoteConnByAddr(uint64_t pinst, const AddrInfo& addr);
-
-  std::vector<std::unique_ptr<RemoteConn>>& GetRemoteConn(uint64_t pinst) {
+  std::vector<std::unique_ptr<Conn>>& GetAllConn(uint64_t pinst) {
     // FIXME: select remote peers for pinst
     (void)pinst;
-    return remote_conn_;
+    return conn_;
   }
 
  private:
@@ -177,12 +178,12 @@ class ConnMng {
   std::mutex lock_;
   ConnCreator conn_creator_;
   std::shared_ptr<Configure> config_;
-  std::unique_ptr<LocalConn> local_conn_;
   std::shared_ptr<PaxosGroupBase> pg_mapper_;
 
-  // remote conn is ordered by svr id
-  std::vector<std::unique_ptr<RemoteConn>> remote_conn_;
+  // conn is ordered by svr id
+  std::vector<std::unique_ptr<Conn>> conn_;
 };
+
 }  // namespace quarrel
 
 #endif

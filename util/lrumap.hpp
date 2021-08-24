@@ -32,7 +32,7 @@ class LruMap {
     }
   }
 
-  const value_t& Get(const key_t& key) {
+  value_t& Get(const key_t& key) {
     auto ptr = GetPtr(key);
     if (ptr == NULL) {
       throw std::range_error("key not exists");
@@ -41,7 +41,7 @@ class LruMap {
     return *ptr;
   }
 
-  const value_t* GetPtr(const key_t& key) {
+  value_t* GetPtr(const key_t& key) {
     auto it = kv_.find(key);
     if (it == kv_.end()) {
       return NULL;

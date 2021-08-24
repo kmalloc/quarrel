@@ -1,6 +1,7 @@
 #include "gtest/gtest.h"
 
 #include "plog.h"
+#include "future.hpp"
 
 using namespace quarrel;
 
@@ -98,7 +99,7 @@ TEST(quarrel_plog, test_entry_serialization) {
 
   p1->pid_ = 444;
   p1->term_ = 555;
-  p1->plid_ = 3;
+  p1->pinst_ = 3;
   p1->pentry_ = 122;
   p1->proposer_ = 1;
   p1->opaque_ = 0xbadf00d;
@@ -108,7 +109,7 @@ TEST(quarrel_plog, test_entry_serialization) {
 
   p2->pid_ = 333;
   p2->term_ = 666;
-  p2->plid_ = 3;
+  p2->pinst_ = 3;
   p2->pentry_ = 122;
   p2->proposer_ = 2;
   p2->opaque_ = 0xbadf22d;

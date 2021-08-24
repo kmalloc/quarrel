@@ -53,13 +53,13 @@ class Acceptor {
   std::shared_ptr<PaxosMsg> handlePrepareReq(Proposal& proposal);
   std::shared_ptr<PaxosMsg> handleChosenReq(Proposal& proposal);
 
-  void doCatchupFromPeer();
-  void TriggerLocalCatchup();
   int doHandleMsg(PaxosRequest req);
+  void doCatchupFromPeer(Proposal& pp);
   int CheckLocalAndMayTriggerCatchup(const Proposal& pp);
+  void TriggerLocalCatchup(uint64_t pinst, uint64_t pentry);
 
  private:
-  uint64_t term_;  // logical time
+  uint32_t self_id_;  // acceptor id
   WorkerPool<PaxosRequest> wpool_;
 
   std::shared_ptr<PlogMng> pmn_;

@@ -47,9 +47,9 @@ enum PaxosMsgType {
   kMsgType_ACCEPT_RSP = 4,
   kMsgType_CHOSEN_REQ = 5,
   kMsgType_CHOSEN_RSP = 6,
-  kMsgType_INVALID_REQ = 7,
   kMsgType_CHORE_REQ = 101,
   kMsgType_CHORE_CATCHUP = 102,
+  kMsgType_INVALID_REQ = 0xffffffff,
 };
 
 enum PaxosErrCode {
@@ -92,7 +92,7 @@ struct Proposal {
   uint64_t pid_;   // proposal id ,pid == 0 indicates a read probe
   uint64_t term_;  // logical time
 
-  uint64_t plid_;        // plog id
+  uint64_t pinst_;       // plog id
   uint64_t pentry_;      // plog entry
   uint64_t last_chosen_;       // last chosen entry from source
   uint16_t last_chosen_from_;  // proposer for last chosen entry
@@ -138,7 +138,7 @@ inline Proposal* GetProposalFromMsg(PaxosMsg* pm) {
 }
 
 inline uint64_t GetPLIdFromMsg(const PaxosMsg* pm) {
-  return reinterpret_cast<const Proposal*>(pm->data_)->plid_;
+  return reinterpret_cast<const Proposal*>(pm->data_)->pinst_;
 }
 }  // namespace quarrel
 

@@ -17,6 +17,8 @@ struct InstanceState {
   uint32_t last_chosen_from_;
   uint64_t last_chosen_entry_;
 
+  // an in memory id that increment when an outbound req is issued.
+  // will not be persistent to disk, used to detect delayed rpc responses.
   uint64_t term_{0};  // logical time
 
   // idgen will be reset when the latest entry is chosen
@@ -88,7 +90,7 @@ std::shared_ptr<PaxosMsg> Proposer::allocPaxosMsg(uint64_t pinst, uint64_t opaqu
   auto pp = GetProposalFromMsg(pm.get());
 
   pp->pid_ = pid;
-  pp->plid_ = pinst;
+  pp->pinst_ = pinst;
   pp->pentry_ = entry;
   pp->opaque_ = opaque;
   pp->status_ = kPaxosState_PREPARED;
@@ -136,7 +138,7 @@ bool Proposer::UpdateChosenInfo(uint64_t pinst, uint64_t chosen, uint64_t from) 
 int Proposer::OnEntryChosen(std::shared_ptr<PaxosMsg> msg, bool from_plog) {
   auto pp = GetProposalFromMsg(msg.get());
 
-  auto pinst = pp->plid_ % locks_.size();
+  auto pinst = pp->pinst_ % locks_.size();
   std::lock_guard<std::mutex> l(locks_[pinst]);
 
   // external chosen notify from plog is only allowed for master.
@@ -154,7 +156,7 @@ int Proposer::OnEntryChosen(std::shared_ptr<PaxosMsg> msg, bool from_plog) {
 bool Proposer::canSkipPrepare(const Proposal& pp) {
   //1. proposer of last entry(which consensus is reached)
   //2. #0 proposal for current entry.
-  auto pinst = pp.plid_;
+  auto pinst = pp.pinst_;
   auto entry = pp.pentry_;
   const auto& state = states_[pinst % locks_.size()];
 
@@ -240,8 +242,7 @@ int Proposer::addRpcResponse(uint64_t pinst, uint64_t entry, std::shared_ptr<Pax
 
 int Proposer::doBatchRpcRequest(std::shared_ptr<PaxosMsg>& pm) {
   auto pinst = GetPLIdFromMsg(pm.get());
-  auto& local = conn_->GetLocalConn();
-  auto& remote = conn_->GetRemoteConn(pinst);
+  auto& conn = conn_->GetAllConn(pinst);
 
   auto pp = GetProposalFromMsg(pm.get());
   auto entry = pp->pentry_;
@@ -255,12 +256,8 @@ int Proposer::doBatchRpcRequest(std::shared_ptr<PaxosMsg>& pm) {
 
   RpcReqData req{config_->timeout_, std::move(cb), pm};
 
-  if (local->DoRpcRequest(req)) {
-    return kErrCode_CONN_FAIL;
-  }
-
-  for (auto i = 0u; i < remote.size(); ++i) {
-    remote[i]->DoRpcRequest(req);
+  for (auto i = 0u; i < conn.size(); ++i) {
+    conn[i]->DoRpcRequest(req);
   }
 
   return kErrCode_OK;
@@ -344,9 +341,14 @@ std::future<int> Proposer::ProposeAsync(uint64_t opaque, const std::string& val,
   }
 
   if (ret == kErrCode_WORKING_IN_PROPGRESS) {
+    // rpc request is on the way.
+    // now setup state machine and return a future to caller.
+    // rpc reponse will be handled in handleRpcResponse().
     setupWaitState(pinst, pp->pentry_, kPaxosState_PREPARING, &frt, &pm);
     return retf;
   }
+
+  // fast accept this way.
 
   if (ret != kErrCode_OK) {
     frt.set_value(ret);
@@ -374,7 +376,7 @@ std::future<int> Proposer::ProposeAsync(uint64_t opaque, const std::string& val,
 
 int Proposer::handlePrepareRsp(std::shared_ptr<PaxosMsg> rsp) {
   auto rsp_proposal = GetProposalFromMsg(rsp.get());
-  auto pinst = rsp_proposal->plid_;
+  auto pinst = rsp_proposal->pinst_;
 
   if (!states_[pinst].req_) {
     // delayed rsp, TODO: update monitor
@@ -409,7 +411,7 @@ int Proposer::handlePrepareRsp(std::shared_ptr<PaxosMsg> rsp) {
 
   if (ret != kErrCode_OK) {
     LOG_ERR << "peer return err for prepare, ret:" << ret << ", status:" << rsp_proposal->status_
-            << ", from:" << rsp->from_ << " @(" << rsp_proposal->plid_ << ","
+            << ", from:" << rsp->from_ << " @(" << rsp_proposal->pinst_ << ","
             << rsp_proposal->pentry_ << ")";
     goto out;
   }
@@ -417,7 +419,7 @@ int Proposer::handlePrepareRsp(std::shared_ptr<PaxosMsg> rsp) {
   if (rsp_proposal->status_ != kPaxosState_PROMISED) {
     ret = -2;
     LOG_ERR << "peer failed to promise, status:" << rsp_proposal->status_
-            << ", from:" << rsp->from_ << " @(" << rsp_proposal->plid_ << ","
+            << ", from:" << rsp->from_ << " @(" << rsp_proposal->pinst_ << ","
             << rsp_proposal->pentry_ << ")";
     goto out;
   }
@@ -426,9 +428,9 @@ int Proposer::handlePrepareRsp(std::shared_ptr<PaxosMsg> rsp) {
 
   if (rsp_proposal->pid_ > req_proposal->pid_) {
     ret = -3;
-    UpdatePrepareId(req_proposal->plid_, rsp_proposal->pid_);
+    UpdatePrepareId(req_proposal->pinst_, rsp_proposal->pid_);
     LOG_ERR << "peer rejected to promise, status:" << rsp_proposal->status_
-            << ", from:" << rsp->from_ << " @(" << rsp_proposal->plid_ << ","
+            << ", from:" << rsp->from_ << " @(" << rsp_proposal->pinst_ << ","
             << rsp_proposal->pentry_ << "), req pid:" << req_proposal->pid_ << ", rsp pid:" << rsp_proposal->pid_;
     goto out;
   }
@@ -449,7 +451,7 @@ int Proposer::handlePrepareRsp(std::shared_ptr<PaxosMsg> rsp) {
     auto lastp = GetProposalFromMsg(last_voted.get());
 
     LOG_INFO << "peer return last vote, from:" << rsp->from_
-             << ", pinst@entry(" << rsp_proposal->plid_ << "," << rsp_proposal->pentry_ << ")"
+             << ", pinst@entry(" << rsp_proposal->pinst_ << "," << rsp_proposal->pentry_ << ")"
              << ", req pid:" << req_proposal->pid_
              << ", rsp pid:" << rsp_proposal->pid_
              << ", req vid:" << req_proposal->value_id_
@@ -557,7 +559,7 @@ int Proposer::doPrepare(std::shared_ptr<PaxosMsg>& pm) {
 
 int Proposer::handleAcceptRsp(std::shared_ptr<PaxosMsg> rsp) {
   auto rsp_proposal = GetProposalFromMsg(rsp.get());
-  auto pinst = rsp_proposal->plid_;
+  auto pinst = rsp_proposal->pinst_;
 
   if (!states_[pinst].req_) {
     // delayed rsp, TODO: update monitor
@@ -592,7 +594,7 @@ int Proposer::handleAcceptRsp(std::shared_ptr<PaxosMsg> rsp) {
   if (rsp_proposal->status_ != kPaxosState_ACCEPTED) {
     ret = kErrCode_PEER_ACCEPT_FAIL;
     LOG_ERR << "peer failed to accept, status:" << rsp_proposal->status_
-            << ", from:" << rsp->from_ << " @(" << rsp_proposal->plid_ << ","
+            << ", from:" << rsp->from_ << " @(" << rsp_proposal->pinst_ << ","
             << rsp_proposal->pentry_ << ")";
     goto out;
   }
@@ -602,7 +604,7 @@ int Proposer::handleAcceptRsp(std::shared_ptr<PaxosMsg> rsp) {
   if (rsp_proposal->pid_ != req_proposal->pid_) {
     // rejected
     ret = kErrCode_PEER_ACCEPT_REJECTED;
-    UpdatePrepareId(req_proposal->plid_, rsp_proposal->pid_);
+    UpdatePrepareId(req_proposal->pinst_, rsp_proposal->pid_);
     goto out;
   }
 

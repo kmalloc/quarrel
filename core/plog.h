@@ -162,7 +162,7 @@ class PlogMng {
   }
 
   int SetPromised(const Proposal& p) {
-    auto pinst = p.plid_;
+    auto pinst = p.pinst_;
     auto mng = GetEntryMngAndCreateIfNotExist(pinst);
     return mng->SetPromised(p);
   }
@@ -173,7 +173,7 @@ class PlogMng {
   }
 
   int SetAccepted(const Proposal& p) {
-    auto pinst = p.plid_;
+    auto pinst = p.pinst_;
     auto mng = GetEntryMngAndCreateIfNotExist(pinst);
     return mng->SetAccepted(p);
   }
@@ -196,6 +196,16 @@ class PlogMng {
   void SetGlobalMaxChosenEntry(uint64_t pinst, uint64_t entry) {
     auto mng = GetEntryMngAndCreateIfNotExist(pinst);
     return mng->SetGlobalMaxChosenEntry(entry);
+  }
+
+  uint64_t GetGlobalMaxChosenEntry(uint64_t pinst) {
+    auto mng = GetEntryMngAndCreateIfNotExist(pinst);
+    return mng->GetGlobalMaxChosenEntry();
+  }
+
+  uint64_t GetMaxCommittedEntry(uint64_t pinst) {
+    auto mng = GetEntryMngAndCreateIfNotExist(pinst);
+    return mng->GetMaxCommittedEntry();
   }
 
   void SetEntryMngCreator(EntryMngCreator creator) {

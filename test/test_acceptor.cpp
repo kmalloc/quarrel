@@ -114,10 +114,10 @@ TEST(acceptor_test, test_acceptor_api) {
   m1->type_ = kMsgType_PREPARE_REQ;
   m2->type_ = kMsgType_PREPARE_REQ;
   p1->pid_ = 2;
-  p1->plid_ = 1;
+  p1->pinst_ = 1;
   p1->pentry_ = 3;
   p2->pid_ = 1;
-  p2->plid_ = 1;
+  p2->pinst_ = 1;
   p2->pentry_ = 4;
 
   ASSERT_EQ(kErrCode_OK, acceptor.AddMsg(m1, blockop));

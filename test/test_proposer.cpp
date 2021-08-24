@@ -31,7 +31,7 @@ struct DummyLocalConn : public LocalConn {
       fake_rsp_->type_ = kMsgType_PREPARE_RSP;
       auto reqfp = GetProposalFromMsg(req2.get());
       auto rspfp = GetProposalFromMsg(fake_rsp_.get());
-      rspfp->plid_ = reqfp->plid_;
+      rspfp->pinst_ = reqfp->pinst_;
       rspfp->pentry_ = reqfp->pentry_;
       rspfp->pid_ = reqfp->pid_ - 1;
       rspfp->value_id_ = reqfp->value_id_ + 1;
@@ -42,7 +42,7 @@ struct DummyLocalConn : public LocalConn {
                << ", rsp vsz:" << rspfp->size_
                << ", req vid:" << rspfp->value_id_
                << ", rsp vid:" << rspfp->value_id_
-               << ", @(" << rspfp->plid_ << "," << rspfp->pentry_ << "), proposer:"
+               << ", @(" << rspfp->pinst_ << "," << rspfp->pentry_ << "), proposer:"
                << rspfp->proposer_;
     }
 
@@ -80,7 +80,7 @@ struct DummyLocalConn : public LocalConn {
 
     LOG_INFO << "acceptor(" << addr_.id_ << "), local conn returns rsp, type:" << rsp->type_
              << ", rsp opaque:" << rspfp->opaque_ << ", reqid:" << rspfp->pid_ << ", @("
-             << rspfp->plid_ << "," << rspfp->pentry_ << "), req proposer:" << rspfp->proposer_;
+             << rspfp->pinst_ << "," << rspfp->pentry_ << "), req proposer:" << rspfp->proposer_;
 
     data.cb_(std::move(rsp));
 
@@ -119,7 +119,7 @@ struct DummyRemoteConn : public RemoteConn {
                << ") dummy rsp from remoteConn, type: " << msg->type_
                << ",msg:(reqid-" << msg->reqid_ << ", opaque-" << pp->opaque_
                << ", vid-" << pp->value_id_ << ",vsz:" << pp->size_ << ", pid-"
-               << pp->pid_ << ")@(" << pp->plid_ << ", " << pp->pentry_ << "), req proposer:" << pp->proposer_;
+               << pp->pid_ << ")@(" << pp->pinst_ << ", " << pp->pentry_ << "), req proposer:" << pp->proposer_;
 
       auto msg2 = CloneProposalMsg(*msg);
       this->HandleRecv(std::move(msg2));
@@ -141,7 +141,7 @@ struct DummyRemoteConn : public RemoteConn {
              << ") dummy remoteConn DoWrite, type: " << req->type_
              << ",msg:(reqid-" << req->reqid_ << ", opaque-" << pp->opaque_
              << ", vid-" << pp->value_id_ << ",vsz:" << pp->size_ << ", pid-"
-             << pp->pid_ << ")@(" << pp->plid_ << ", " << pp->pentry_ << "), req proposer:" << pp->proposer_;
+             << pp->pid_ << ")@(" << pp->pinst_ << ", " << pp->pentry_ << "), req proposer:" << pp->proposer_;
 
     auto reqfp = GetProposalFromMsg(req2.get());
 
@@ -151,7 +151,7 @@ struct DummyRemoteConn : public RemoteConn {
       fake_rsp_->type_ = kMsgType_PREPARE_RSP;
       auto rspfp = GetProposalFromMsg(fake_rsp_.get());
 
-      rspfp->plid_ = reqfp->plid_;
+      rspfp->pinst_ = reqfp->pinst_;
       rspfp->pentry_ = reqfp->pentry_;
 
       rspfp->pid_ = reqfp->pid_ - addr_.id_;  // simulate returning last vote
@@ -170,7 +170,7 @@ struct DummyRemoteConn : public RemoteConn {
     auto rpp = GetProposalFromMsg(rsp.get());
     if ((rejectAccept_ && req2->type_ == kMsgType_ACCEPT_REQ) ||
         (rejectPrepare_ && req2->type_ == kMsgType_PREPARE_REQ)) {
-      LOG_ERR << "acceptor(" << addr_.id_ << ")@(" << rpp->plid_ << ","
+      LOG_ERR << "acceptor(" << addr_.id_ << ")@(" << rpp->pinst_ << ","
               << rpp->pentry_ << ") rejected from remote";
 
       auto pp2 = GetProposalFromMsg(req2.get());
@@ -223,6 +223,7 @@ TEST(proposer, doPropose) {
   config->timeout_ = 18;  // 8ms
   config->local_ = {0, ConnType_LOCAL, "xxxx:yyy"};
   config->plog_inst_num_ = 666;
+  config->peer_.push_back(config->local_);
   config->peer_.push_back({1, ConnType_REMOTE, "aaaa:bb"});
   config->peer_.push_back({2, ConnType_REMOTE, "aaaa2:bb2"});
 
@@ -232,6 +233,7 @@ TEST(proposer, doPropose) {
   config2->timeout_ = 18;  // 8ms
   config2->local_ = {2, ConnType_LOCAL, "xxxx:yyy"};
   config2->plog_inst_num_ = 666;
+  config2->peer_.push_back(config->local_);
   config2->peer_.push_back({1, ConnType_REMOTE, "aaaa:bb"});
   config2->peer_.push_back({0, ConnType_REMOTE, "aaaa2:bb2"});
   Proposer pps(config2);
@@ -250,14 +252,16 @@ TEST(proposer, doPropose) {
   auto conn_mng = std::make_shared<ConnMng>(config, mapper);
 
   conn_mng->SetConnCreator(conn_creator);
-  ASSERT_EQ(2, conn_mng->CreateConn());
+  ASSERT_EQ(3, conn_mng->CreateConn());
 
-  auto& local = conn_mng->GetLocalConn();
+  auto& all_conn = conn_mng->GetAllConn(0);
+
+  auto& r1 = all_conn[1];
+  auto& r2 = all_conn[2];
+  auto& local = all_conn[0];
+
   ASSERT_EQ(ConnType_LOCAL, local->GetType());
   ASSERT_STREQ("xxxx:yyy", local->GetAddr().addr_.c_str());
-
-  auto& r1 = conn_mng->GetRemoteConn(0)[0];
-  auto& r2 = conn_mng->GetRemoteConn(0)[1];
 
   ASSERT_EQ(ConnType_REMOTE, r1->GetType());
   ASSERT_STREQ("aaaa:bb", r1->GetAddr().addr_.c_str());
