@@ -1,8 +1,7 @@
+#include "fix_count_allocator.hpp"
 #include "gtest/gtest.h"
 
-#include "base/fix_count_allocator.hpp"
-
-namespace base {
+namespace quarrel {
 
 TEST(fix_count_alloc, vector_queue) {
   int alloc_count = 0, release_count = 0;
@@ -136,4 +135,4 @@ TEST(fix_count_alloc, lockfree_queue) {
   r1[1].clear();
 }
 
-}  // namespace base
+}  // namespace quarrel

@@ -53,9 +53,8 @@ struct WorkerInfo {
 };
 
 int event_fd_alloc() {
-  // event fd is nonblock so that the coroutine hook can step in for user
-  // this is NOT a good generic impl though.
-  return syscall(__NR_eventfd, 0, EFD_NONBLOCK);
+  // return syscall(__NR_eventfd, 0, EFD_NONBLOCK);
+  return syscall(__NR_eventfd, 0, 0);
 }
 
 void event_fd_release(int fd) {

@@ -30,11 +30,14 @@ class Paxos {
   // Propose() try to propose a new value.
   // empty value indicates a read probe, testing whether local is up to date.
   // paxos_inst: the paxos instance to write to, default is 0 for single instance paxos.
+
   // total number of instances is expected to be relativelly small(maybe < 1000).
   // for a cluster of servers, however, instance count could be really large.
   // users need to handle these instances mapping from global to local.
   // from a synod's point of view, it processes only a small consecutive array of instances.
   // but globally, every synod handles unique set of consecutive paxos instances.
+
+  // TODO: to increase the number of instances, Proposer should use an LRU construct to maintain the state of every paxos instance.
   int Propose(uint64_t opaque, const std::string& value, uint64_t paxos_inst = 0);
 
   std::future<int> ProposeAsync(uint64_t opaque, const std::string& value, uint64_t paxos_inst = 0);

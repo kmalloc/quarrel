@@ -1,10 +1,11 @@
 #pragma once
 
-#include <vector>
 #include <functional>
-#include "base/lockfreequeue.hpp"
+#include <vector>
 
-namespace base {
+#include "queue.h"
+
+namespace quarrel {
 
 template <typename T>
 class FixCountVector {
@@ -131,4 +132,4 @@ using FixCountVectorAllocator = FixCountAllocator<T, FixCountVector<T>>;
 template <typename T>
 using FixCountLockFreeAllocator = FixCountAllocator<T, FixCountLockFreeQueue<T>>;
 
-}  // namespace base
+}  // namespace quarrel
