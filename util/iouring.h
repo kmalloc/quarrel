@@ -1,16 +1,15 @@
 #pragma once
 
-#include <liburing.h>
-
 #include <atomic>
-#include <functional>
 #include <thread>
 #include <vector>
+#include <functional>
+#include <liburing.h>
 
-#include "base/fix_count_allocator.hpp"
 #include "base/lockfreequeue.hpp"
+#include "base/fix_count_allocator.hpp"
 
-namespace iouring {
+namespace quarrel {
 
 // io uring used locked memory.
 // make sure to tune /etc/security/limits.conf accordingly.
@@ -34,6 +33,18 @@ enum {
   IOURING_ERR_ALLOC_REQ_DATA_FAILED = -1006,
   IOURING_ERR_LOCK_MEM_NOT_ENOUGH = -1007,
   IOURING_ERR_SUBMIT_QUEUE_FULL = -1008,
+};
+
+enum UringStatisticType {
+  IOURING_STATISTIC_START,
+  IOURING_STATISTIC_REQ,
+  IOURING_STATISTIC_SUBMIT,
+  IOURING_STATISTIC_POLL_FAIL,
+  IOURING_STATISTIC_SUBMIT_FAIL,
+  IOURING_STATISTIC_GET_SQE_FAIL,
+  IOURING_STATISTIC_ALLOC_CTX_FAIL,
+  IOURING_STATISTIC_INTERNAL_REQ,
+  IOURING_STATISTIC_END,
 };
 
 struct IoContext;
@@ -70,10 +81,21 @@ class IoUring {
   int AddWriteReqAsync(int fd, uint64_t offset, const void* data, uint64_t size, IoDoneNotify n, void* ud);
   int AddBatchWriteReqAsync(int fd, uint64_t offset, const struct iovec* data, uint64_t size, IoDoneNotify n, void* ud);
 
+  // first param: instance id
+  // second param: statistic type, refer to UringStatisticType
+  // third param : counter
+  // periodically called from an independant thread
+  using UringStatisticReporter = std::function<void(int, int, int)>;
+
+  void SetStatisticReport(UringStatisticReporter r) {
+    reporter_ = std::move(r);
+  }
+
  private:
   IoUring(const IoUring&) = delete;
   IoUring& operator=(const IoUring&) = delete;
 
+  void reportLoop();
   void pollLoop(int wid);
   int issueRequest(PendingReq& req);
 
@@ -83,9 +105,11 @@ class IoUring {
  private:
   UringOptions opt_;
   std::atomic<bool> stop_;
+  std::thread reporter_th_;
+  UringStatisticReporter reporter_;
   std::vector<std::unique_ptr<WorkerInfo>> workers_;
-  base::FixCountLockFreeAllocator<int> event_fd_pool_;
-  base::FixCountVectorAllocator<IoContext*> waiting_req_;
+  FixCountLockFreeAllocator<int> event_fd_pool_;
+  FixCountVectorAllocator<IoContext*> waiting_req_;
 };
 
 }  // namespace iouring

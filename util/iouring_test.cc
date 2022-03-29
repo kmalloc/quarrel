@@ -5,7 +5,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-using namespace iouring;
+using namespace quarrel;
 
 int GetFileSize(const char* fname) {
   struct stat sbuf;
@@ -95,12 +95,15 @@ TEST(iouring, verify_read_write) {
 
   close(fd);
   unlink(fn);
+  std::cout << "test verify done, now stop io uring" << std::endl;
+
   iu.Stop();
 }
 
 TEST(iouring, concurrent_read_write) {
   UringOptions opt;
   opt.instances = 4;
+  opt.iodepth = 300;
 
   IoUring iu(opt);
   ASSERT_EQ(0, iu.Start());
@@ -144,11 +147,17 @@ TEST(iouring, concurrent_read_write) {
         ASSERT_EQ(sz, iu.AddReadReqSync(fd, offset, &buff[0], sz)) << "offset:" << offset;
         ASSERT_STREQ(content.data(), buff.data());
       } else {
-        ASSERT_EQ(sz, iu.AddWriteReqSync(fd, offset, &content[0], sz));
+        ASSERT_EQ(sz, iu.AddWriteReqSync(fd, offset, &content[0], sz)) << "write, times:" << times << ", offset:" << offset << ", sz:" << sz;
+      }
+
+      if (times % 5000 == 0) {
+        std::cout << "worker" << wid << ", times:" << times << std::endl;
       }
 
       close(fd);
     }
+
+    std::cout << "worker" << wid << " done" << std::endl;
   };
 
   int num_threads = 280;

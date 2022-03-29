@@ -16,7 +16,7 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
-namespace iouring {
+namespace quarrel {
 enum {
   REQ_TYPE_START,
   REQ_TYPE_READ,
@@ -48,13 +48,12 @@ struct WorkerInfo {
   PendingReq req_notifier_;
 
   struct io_uring ring_;
-  base::LockFreeQueueV2<PendingReq> req_queue_;
+  LockFreeQueueV2<PendingReq> req_queue_;
+
+  std::atomic<uint32_t> unsubmit_{0};
 
   // statistic counter
-  uint64_t req_count_;
-  uint64_t submit_count_;
-
-  std::atomic<uint32_t> unsubmit_;
+  uint64_t statistic_[IOURING_STATISTIC_END - 1];
 };
 
 int event_fd_alloc() {
@@ -112,6 +111,8 @@ int IoUring::Stop() {
     close(w->req_notifier_.fd_);
     io_uring_queue_exit(&w->ring_);
   }
+
+  reporter_th_.join();
   return 0;
 }
 
@@ -129,7 +130,7 @@ int IoUring::Start() {
     flags |= IORING_FEAT_NODROP;
   }
 
-  // workers_ = std::move(std::vector<WorkerInfo>(opt_.instances));
+  stop_ = false;
   workers_.resize(opt_.instances);
 
   for (int i = 0; i < opt_.instances; i++) {
@@ -139,6 +140,7 @@ int IoUring::Start() {
     }
 
     workers_[i] = std::unique_ptr<WorkerInfo>(new WorkerInfo);
+    memset(workers_[i]->statistic_, 0, sizeof(workers_[i]->statistic_));
 
     // iodepth + 1 to ensure 1 more position for internal req notifier
     auto ret = io_uring_queue_init(opt_.iodepth + 1, &workers_[i]->ring_, flags);
@@ -153,7 +155,6 @@ int IoUring::Start() {
 
     workers_[i]->req_notifier_.fd_ = efd;
     workers_[i]->req_notifier_.type_ = REQ_TYPE_INTERNAL_REQ;
-
     workers_[i]->req_queue_.Init(opt_.iodepth);
 
     // io_uring_register_eventfd(&workers_[i]->ring_, efd);
@@ -165,6 +166,8 @@ int IoUring::Start() {
 
     workers_[i]->th_ = std::thread(&IoUring::pollLoop, this, i);
   }
+
+  reporter_th_ = std::thread(&IoUring::reportLoop, this);
 
   return 0;
 }
@@ -318,6 +321,25 @@ int IoUring::issueRequest(PendingReq& req) {
   return 0;
 }
 
+void IoUring::reportLoop() {
+  while (!stop_.load(std::memory_order_relaxed)) {
+    if (reporter_) {
+      for (auto i = 0; i < opt_.instances; i++) {
+        for (int j = IOURING_STATISTIC_START; j < IOURING_STATISTIC_END; j++) {
+          if (workers_[i]->statistic_[j] == 0) {
+            continue;
+          }
+
+          reporter_(i, j + 1, workers_[i]->statistic_[j]);
+          workers_[i]->statistic_[j] = 0;  // not thread safe but not really matter
+        }
+      }
+    }
+
+    std::this_thread::sleep_for(std::chrono::seconds(4));
+  }
+}
+
 void IoUring::pollLoop(int wid) {
   bool wait_block = true;
   bool rearm_notifier = false;
@@ -337,6 +359,7 @@ void IoUring::pollLoop(int wid) {
 
     if (wait_block && ret < 0) {
       // assert(0);
+      workers_[wid]->statistic_[IOURING_STATISTIC_POLL_FAIL - 1]++;
       continue;
     }
 
@@ -359,6 +382,7 @@ void IoUring::pollLoop(int wid) {
           uint64_t ev;
           rearm_notifier = true;
           read(ctx->req_.fd_, &ev, sizeof(ev));
+          workers_[wid]->statistic_[IOURING_STATISTIC_INTERNAL_REQ - 1]++;
           break;
       }
 
@@ -389,6 +413,7 @@ void IoUring::pollLoop(int wid) {
 
       auto ctx = waiting_req_.AllocByShard(wid);
       if (ctx == NULL) {
+        workers_[wid]->statistic_[IOURING_STATISTIC_ALLOC_CTX_FAIL - 1]++;
         pending_req.done_(IOURING_ERR_ALLOC_REQ_DATA_FAILED, pending_req.ud_);
         continue;
       }
@@ -397,6 +422,7 @@ void IoUring::pollLoop(int wid) {
       if (!sqe) {
         pending_req.done_(IOURING_ERR_ALLOC_SUBMIT_FAILED, pending_req.ud_);
         waiting_req_.ReleaseByShard(wid, ctx);
+        workers_[wid]->statistic_[IOURING_STATISTIC_GET_SQE_FAIL - 1]++;
         continue;
       }
 
@@ -426,7 +452,6 @@ void IoUring::pollLoop(int wid) {
     }
 
     if (batch_num > 0) {
-      workers_[wid]->submit_count_++;
       auto ret = io_uring_submit(&workers_[wid]->ring_);
       if (ret < 0) {
         if (ret == -EBUSY) {
@@ -436,15 +461,17 @@ void IoUring::pollLoop(int wid) {
           unsubmitted[i]->req_.done_(ret, unsubmitted[i]->req_.ud_);
           waiting_req_.ReleaseByShard(wid, unsubmitted[i]);
         }
+        workers_[wid]->statistic_[IOURING_STATISTIC_SUBMIT_FAIL - 1]++;
       } else {
         unsubmitted.clear();
         rearm_notifier = false;
       }
+      workers_[wid]->statistic_[IOURING_STATISTIC_SUBMIT - 1]++;
     }
 
-    workers_[wid]->req_count_ += batch_num;
     wait_block = (batch_num < opt_.max_batch_num);
+    workers_[wid]->statistic_[IOURING_STATISTIC_REQ - 1] += batch_num;
   }
 }
 
-}  // namespace iouring
+}  // namespace quarrel
