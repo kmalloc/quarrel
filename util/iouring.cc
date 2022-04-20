@@ -10,6 +10,7 @@
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
 #include <sys/ioctl.h>
+#include <sys/prctl.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
@@ -50,6 +51,7 @@ struct WorkerInfo {
   struct io_uring ring_;
   LockFreeQueueV2<PendingReq> req_queue_;
 
+  int uncompleted = 0;  // IORING_FEAT_NODROP is not supported in 5.4 kernel, so need to limit submitting if uncompleted is >= iodepth
   std::atomic<uint32_t> unsubmit_{0};
 
   // statistic counter
@@ -57,6 +59,8 @@ struct WorkerInfo {
 };
 
 int event_fd_alloc() {
+  // event fd is nonblock so that the coroutine hook can step in for user
+  // this is NOT a good generic impl though.
   return syscall(__NR_eventfd, 0, 0);
   // return syscall(__NR_eventfd, 0, EFD_NONBLOCK);
 }
@@ -83,7 +87,11 @@ void SanitizeOptions(iouring::UringOptions& opt) {
   if (opt.max_batch_num <= 0) {
     opt.max_batch_num = 256;
   }
+  if (opt.max_batch_num > opt.iodepth) {
+    opt.max_batch_num = opt.iodepth;
+  }
 
+  opt.iodepth++;
   opt.max_batch_num++;  // 1 more for internal usage
   opt.enable_sq_thread = false;
   opt.enable_io_dev_poll = false;
@@ -142,8 +150,7 @@ int IoUring::Start() {
     workers_[i] = std::unique_ptr<WorkerInfo>(new WorkerInfo);
     memset(workers_[i]->statistic_, 0, sizeof(workers_[i]->statistic_));
 
-    // iodepth + 1 to ensure 1 more position for internal req notifier
-    auto ret = io_uring_queue_init(opt_.iodepth + 1, &workers_[i]->ring_, flags);
+    auto ret = io_uring_queue_init(opt_.iodepth, &workers_[i]->ring_, flags);
 
     if (ret) {
       close(efd);
@@ -153,6 +160,7 @@ int IoUring::Start() {
       return ret;
     }
 
+    workers_[i]->uncompleted = 1;  // pending req notifier
     workers_[i]->req_notifier_.fd_ = efd;
     workers_[i]->req_notifier_.type_ = REQ_TYPE_INTERNAL_REQ;
     workers_[i]->req_queue_.Init(opt_.iodepth);
@@ -192,7 +200,10 @@ int IoUring::doIoOpSync(int fd, uint64_t offset, void* buff, uint64_t size, IoOp
     auto r = (struct RetType*)ud;
     uint64_t v = 1;
     r->ret = res;  // WARN no fast return is permitted in following, otherwise this will cause bad memory access.
-    write(r->notifier, &v, sizeof(v));
+    int rt;
+    do {
+      rt = write(r->notifier, &v, sizeof(v));
+    } while (rt == -1 && (errno == EINTR || errno == EAGAIN));
     return 0;
   };
 
@@ -208,7 +219,9 @@ int IoUring::doIoOpSync(int fd, uint64_t offset, void* buff, uint64_t size, IoOp
 
   if (ret > 0) {
     uint64_t ev;
-    ret = read(notifier, &ev, sizeof(ev));
+    do {
+      ret = read(notifier, &ev, sizeof(ev));
+    } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
   }
 
   event_fd_pool_.ReleaseByShard(fd, notifier);
@@ -221,7 +234,6 @@ int IoUring::AddReadReqSync(int fd, uint64_t offset, void* buff, uint64_t size) 
   auto op = [](IoUring* self, int fd, uint64_t offset, void* buff, uint64_t size, IoDoneNotify cb, void* ud) -> int {
     return self->AddReadReqAsync(fd, offset, buff, size, std::move(cb), ud);
   };
-
   return doIoOpSync(fd, offset, buff, size, std::move(op));
 }
 
@@ -229,7 +241,6 @@ int IoUring::AddWriteReqSync(int fd, uint64_t offset, const void* data, uint64_t
   auto op = [](IoUring* self, int fd, uint64_t offset, void* data, uint64_t size, IoDoneNotify cb, void* ud) -> int {
     return self->AddWriteReqAsync(fd, offset, data, size, std::move(cb), ud);
   };
-
   return doIoOpSync(fd, offset, (void*)data, size, std::move(op));
 }
 
@@ -237,7 +248,6 @@ int IoUring::AddBatchReadReqSync(int fd, uint64_t offset, struct iovec* buff, ui
   auto op = [](IoUring* self, int fd, uint64_t offset, void* buff, uint64_t size, IoDoneNotify cb, void* ud) -> int {
     return self->AddBatchReadReqAsync(fd, offset, (struct iovec*)buff, size, std::move(cb), ud);
   };
-
   return doIoOpSync(fd, offset, buff, size, std::move(op));
 }
 
@@ -245,7 +255,6 @@ int IoUring::AddBatchWriteReqSync(int fd, uint64_t offset, const struct iovec* d
   auto op = [](IoUring* self, int fd, uint64_t offset, void* data, uint64_t size, IoDoneNotify cb, void* ud) -> int {
     return self->AddBatchWriteReqAsync(fd, offset, (const struct iovec*)data, size, std::move(cb), ud);
   };
-
   return doIoOpSync(fd, offset, (void*)data, size, std::move(op));
 }
 
@@ -297,16 +306,20 @@ int IoUring::AddBatchWriteReqAsync(int fd, uint64_t offset, const struct iovec* 
   return issueRequest(req);
 }
 
-int IoUring::issueRequest(PendingReq& req) {
-  int idx = 0;
-  auto& w = workers_[idx];
-
+int IoUring::getWorkerIdxByFd(int fd) const {
+  int idx;
   if (opt_.dispatch_type == 1) {
-    idx = req.fd_ % workers_.size();
+    idx = fd % workers_.size();
   } else {
     idx = rand() % workers_.size();
   }
+  return idx;
+}
 
+int IoUring::issueRequest(PendingReq& req) {
+  int idx = getWorkerIdxByFd(req.fd_);
+
+  auto& w = workers_[idx];
   if (w->req_queue_.Enqueue(std::move(req), false)) {
     return IOURING_ERR_QUEUE_FULL;
   }
@@ -321,17 +334,25 @@ int IoUring::issueRequest(PendingReq& req) {
   return 0;
 }
 
+void setThreadName(const char* prefix, int id) {
+  char th_name[32];
+  snprintf(th_name, sizeof(th_name), "%s_%d", prefix, id);
+  prctl(PR_SET_NAME, th_name);
+}
+
 void IoUring::reportLoop() {
+  setThreadName("iouring_reporter", 0);
   while (!stop_.load(std::memory_order_relaxed)) {
     if (reporter_) {
       for (auto i = 0; i < opt_.instances; i++) {
-        for (int j = IOURING_STATISTIC_START; j < IOURING_STATISTIC_END; j++) {
+        for (int j = IOURING_STATISTIC_START; j < IOURING_STATISTIC_END - 1; j++) {
           if (workers_[i]->statistic_[j] == 0) {
             continue;
           }
 
-          reporter_(i, j + 1, workers_[i]->statistic_[j]);
-          workers_[i]->statistic_[j] = 0;  // not thread safe but not really matter
+          if (reporter_(i, j + 1, workers_[i]->statistic_[j])) {
+            workers_[i]->statistic_[j] = 0;  // not thread safe but not really matter
+          }
         }
       }
     }
@@ -341,29 +362,33 @@ void IoUring::reportLoop() {
 }
 
 void IoUring::pollLoop(int wid) {
+  setThreadName("iouring", wid);
+
   bool wait_block = true;
   bool rearm_notifier = false;
 
+  auto& wk = workers_[wid];
   std::vector<IoContext*> unsubmitted;
-  unsubmitted.reserve(opt_.iodepth + 1);
+  unsubmitted.reserve(opt_.iodepth);
 
   while (!stop_.load(std::memory_order_relaxed)) {
     int ret = 0;
     struct io_uring_cqe* cqe = NULL;
 
     if (wait_block) {
-      ret = io_uring_wait_cqe(&workers_[wid]->ring_, &cqe);
+      ret = io_uring_wait_cqe(&wk->ring_, &cqe);
     } else {
-      ret = io_uring_peek_cqe(&workers_[wid]->ring_, &cqe);
+      ret = io_uring_peek_cqe(&wk->ring_, &cqe);
     }
 
     if (wait_block && ret < 0) {
-      // assert(0);
-      workers_[wid]->statistic_[IOURING_STATISTIC_POLL_FAIL - 1]++;
+      // assert(0); most likely EINTR
+      wk->statistic_[IOURING_STATISTIC_POLL_FAIL - 1]++;
       continue;
     }
 
     if (ret == 0 && cqe) {
+      wk->uncompleted--;
       IoContext* ctx = (IoContext*)cqe->user_data;
 
       switch (ctx->req_.type_) {
@@ -371,39 +396,42 @@ void IoUring::pollLoop(int wid) {
         case REQ_TYPE_READ_BATCH:
           ctx->req_.done_(cqe->res, ctx->req_.ud_);
           waiting_req_.ReleaseByShard(wid, ctx);
+          wk->statistic_[IOURING_STATISTIC_RSP - 1]++;
           break;
         case REQ_TYPE_WRIET:
         case REQ_TYPE_WRIET_BATCH:
           ctx->req_.done_(cqe->res, ctx->req_.ud_);
           waiting_req_.ReleaseByShard(wid, ctx);
+          wk->statistic_[IOURING_STATISTIC_RSP - 1]++;
           break;
         case REQ_TYPE_INTERNAL_REQ:
           // rearm notifier
           uint64_t ev;
           rearm_notifier = true;
           read(ctx->req_.fd_, &ev, sizeof(ev));
-          workers_[wid]->statistic_[IOURING_STATISTIC_INTERNAL_REQ - 1]++;
+          wk->statistic_[IOURING_STATISTIC_INTERNAL_REQ - 1]++;
           break;
+        default:
+          assert(0);
       }
 
-      io_uring_cqe_seen(&workers_[wid]->ring_, cqe);
+      io_uring_cqe_seen(&wk->ring_, cqe);
     }
 
-    int batch_num = 0;
+    int notifier_sqe = 0;
     PendingReq pending_req;
 
     if (rearm_notifier) {
-      struct io_uring_sqe* sqe = io_uring_get_sqe(&workers_[wid]->ring_);
+      struct io_uring_sqe* sqe = io_uring_get_sqe(&wk->ring_);
       if (sqe) {
-        batch_num++;
-        io_uring_prep_poll_add(sqe, workers_[wid]->req_notifier_.fd_, POLLIN);
-        io_uring_sqe_set_data(sqe, &workers_[wid]->req_notifier_);
+        notifier_sqe = 1;
+        io_uring_prep_poll_add(sqe, wk->req_notifier_.fd_, POLLIN);
+        io_uring_sqe_set_data(sqe, &wk->req_notifier_);
       }
     }
 
-    while (workers_[wid]->req_queue_.Dequeue(pending_req, false) == 0 && batch_num < opt_.max_batch_num) {
-      batch_num++;
-      workers_[wid]->unsubmit_.fetch_sub(1, std::memory_order_relaxed);
+    while (wk->uncompleted < opt_.iodepth && (unsubmitted.size() + notifier_sqe) < (uint32_t)opt_.max_batch_num && wk->req_queue_.Dequeue(pending_req, false) == 0) {
+      wk->unsubmit_.fetch_sub(1, std::memory_order_relaxed);
 
       if (pending_req.type_ <= REQ_TYPE_START || pending_req.type_ >= REQ_TYPE_END) {
         // unknown type
@@ -413,17 +441,17 @@ void IoUring::pollLoop(int wid) {
 
       auto ctx = waiting_req_.AllocByShard(wid);
       if (ctx == NULL) {
-        workers_[wid]->statistic_[IOURING_STATISTIC_ALLOC_CTX_FAIL - 1]++;
-        pending_req.done_(IOURING_ERR_ALLOC_REQ_DATA_FAILED, pending_req.ud_);
-        continue;
+        wk->statistic_[IOURING_STATISTIC_ALLOC_CTX_FAIL - 1]++;
+        pending_req.done_(IOURING_ERR_ALLOC_IO_CTX_FAILED, pending_req.ud_);
+        break;
       }
 
-      struct io_uring_sqe* sqe = io_uring_get_sqe(&workers_[wid]->ring_);
+      struct io_uring_sqe* sqe = io_uring_get_sqe(&wk->ring_);
       if (!sqe) {
-        pending_req.done_(IOURING_ERR_ALLOC_SUBMIT_FAILED, pending_req.ud_);
+        pending_req.done_(IOURING_ERR_ALLOC_SQE_FAILED, pending_req.ud_);
         waiting_req_.ReleaseByShard(wid, ctx);
-        workers_[wid]->statistic_[IOURING_STATISTIC_GET_SQE_FAIL - 1]++;
-        continue;
+        wk->statistic_[IOURING_STATISTIC_GET_SQE_FAIL - 1]++;
+        break;
       }
 
       uint32_t num_iov = 0;
@@ -447,13 +475,19 @@ void IoUring::pollLoop(int wid) {
       }
 
       ctx->req_ = std::move(pending_req);
-      io_uring_sqe_set_data(sqe, ctx);
       unsubmitted.push_back(ctx);
+      io_uring_sqe_set_data(sqe, ctx);
     }
 
-    if (batch_num > 0) {
-      auto ret = io_uring_submit(&workers_[wid]->ring_);
-      if (ret < 0) {
+    int user_req = unsubmitted.size();
+    int total_req = user_req + notifier_sqe;
+
+    if (total_req > 0) {
+      do {
+        ret = io_uring_submit(&wk->ring_);
+      } while (ret == -EINTR || ret == -EAGAIN);
+
+      if (ret <= 0) {
         if (ret == -EBUSY) {
           ret = IOURING_ERR_SUBMIT_QUEUE_FULL;
         }
@@ -461,17 +495,21 @@ void IoUring::pollLoop(int wid) {
           unsubmitted[i]->req_.done_(ret, unsubmitted[i]->req_.ud_);
           waiting_req_.ReleaseByShard(wid, unsubmitted[i]);
         }
-        workers_[wid]->statistic_[IOURING_STATISTIC_SUBMIT_FAIL - 1]++;
+        wk->statistic_[IOURING_STATISTIC_SUBMIT_FAIL - 1]++;
       } else {
-        unsubmitted.clear();
+        assert(ret == total_req);  // TODO: need proper handling of this since it is possible in some old kernel.
         rearm_notifier = false;
+        wk->uncompleted += total_req;
       }
-      workers_[wid]->statistic_[IOURING_STATISTIC_SUBMIT - 1]++;
+      unsubmitted.clear();
+      wk->statistic_[IOURING_STATISTIC_SUBMIT - 1]++;
     }
 
-    wait_block = (batch_num < opt_.max_batch_num);
-    workers_[wid]->statistic_[IOURING_STATISTIC_REQ - 1] += batch_num;
+    wait_block = (total_req < opt_.max_batch_num);
+    if (user_req > 0) {
+      wk->statistic_[IOURING_STATISTIC_REQ - 1] += user_req;
+    }
   }
 }
 
-}  // namespace quarrel
+}  // namespace iouring
